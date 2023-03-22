@@ -1,0 +1,4442 @@
+---
+title: "Crane_trachea"
+author: "Chauncey Gadek and Trinity Casaus" 
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: true
+    number_sections: true
+    toc_depth: 5
+    code_folding: show
+    #df_print: paged
+    #df_print: kable
+    #toc_float: true
+      #collapsed: false
+      #smooth_scroll: TRUE
+    theme: cosmo #spacelab #yeti #united #cosmo
+    highlight: tango
+  pdf_document:
+    df_print: kable
+fontsize: 12pt
+geometry: margin=0.25in
+always_allow_html: yes
+---
+
+```{=html}
+<style>
+/* HTML FORMATTING */
+h1, .h1, h2, .h2, h3, .h3, h4, .h4, h5, .h5 {
+  margin-top: 25px; /* space before each header */
+  font-weight: bold; /* bold headers */
+}
+</style>
+```
+```{R, echo=FALSE}
+# I set some GLOBAL R chunk options here.
+#   (to hide this message add "echo=FALSE" to the code chunk options)
+rm(list =ls (all = TRUE)) #This removes objects from global environ
+knitr::opts_chunk$set(echo=F, comment = NA, message = FALSE, warning = FALSE, width = 100)
+knitr::opts_chunk$set(fig.align = "center", fig.height = 4, fig.width = 6)
+#setwd("C:/Users/Trinity's/Dropbox/Crane_trachea")
+#setwd("~/Dropbox/Crane_trachea") #need to change to local directory
+```
+
+# Load Packages
+
+```{R}
+library(reshape)
+library(reshape2)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(car)
+library(rcompanion)
+library(GGally)
+library(Hmisc)
+library(gridExtra)
+library(stats)
+library(gplots)
+library(ggplot2)
+library(ggExtra)
+library(cowplot)
+library(colorspace)
+library(stats4) # Forces knitr to work when it's being wonky
+library(PMCMR) #Allows Kruskal-Wallis post-hocs
+library(effects)
+library(gridExtra)
+library(lattice)
+library(survival)
+library(fmsb)
+library(faraway)
+library(ape)
+#library(wBoot)
+library(ggridges)
+library(boot)
+library(faux)
+library(effsize)
+library(plotrix)
+library(colorspace)
+library(ggpubr)
+library(patchwork)
+library(ggdist)
+
+# Mapping 
+library(raster)
+library(sp)
+library(rgdal)
+library(RStoolbox)
+library(prettymapr)
+library(viridis)
+library(rasterVis)
+
+
+# Modeling packages 
+library(nlme)
+library(lme4)
+library(AICcmodavg)
+library(MuMIn)
+library(glmulti)
+library(reghelper)
+library(lsmeans)
+library(rsq) # get r-squared values from GLM
+library(r2glmm) # for R^2 values from lmer() and glmer()
+library(multcompView) # related to multiple comparisons?
+library(jtools) # interaction plots 
+library(interactions) # interaction plots 
+library(broom)
+library(stargazer) # model output tables
+library(ggeffects) # for estimating model predictions from mixed effects models
+library(MCMCglmm)
+library(bayesplot)
+library(rstan)
+library(Rcpp) # required for brms
+library(brms)
+library(magrittr)
+library(tidybayes)
+library(modelr)
+library(hexbin)
+library(ggExtra)
+library(rgl)
+
+# To run each time you load rstan
+options(mc.cores = parallel::detectCores()) # for core setup 
+rstan_options(auto_write = TRUE) # auto save  bare verion of compiled Stan program to HD
+
+# Phylo packages 
+library(phytools)
+library(ape)
+
+#setup folder paths for less coding
+figures <- paste(getwd(), "/figures/", sep="")
+tables <- paste(getwd(), "/Tables/", sep="")
+models <- paste(getwd(), "/models/", sep="")
+results <- paste(getwd(), "/models/results/", sep="")
+```
+
+# Data Processing
+
+```{R}
+dat.f <- read.csv("~/Dropbox/Crane_trachea/data/Crane_Trachea.csv", header =TRUE)
+
+dat.morpho <- read.csv("~/Dropbox/Crane_trachea/crane_morpho.csv", header =TRUE)
+#NOTE on dataset: on 2/23/21 Chauncey added all Jones & Witt 2014 cranes available from ARCTOS. Very few subspecies were designated so used preliminary cutoff of <4000g mass to assign to lesser subspecies. Outlier analysis should be done to assess this threshold. Also note that I assigned Y/N to bursa based on sex determination. I know this is bad but I'm in hurry and bursa is not reported consistently. If we want to do more fine-scale age analyses will need to revisit these data labeled 2009 in year_sampled column.
+
+dat.f$mean_trachea_length <-rowMeans(subset(dat.f, select = c(length_mm_1, length_mm_2, length_mm_3)), na.rm = TRUE) #make mean for three length measurements a variable, then add in mean trachea lengths from older subset whihc are maybe means already? FIND OUT!
+
+for(i in 1:nrow(dat.f)){
+  if(is.na(dat.f$mean_trachea_length[i]))
+    dat.f$mean_trachea_length <-dat.f$length_mm_1[i]
+}
+
+dat.f$width._1st_curve <-as.numeric(dat.f$width._1st_curve) #NOTE making character value of trachea width to a numerical value
+dat.f$segment_density <- dat.f$segment_count2/dat.f$mean_trachea_length #NOTE create segment density
+
+dat.f <- dat.f %>%
+  mutate_if(sapply(dat.f, is.character), as.factor)%>%
+mutate(mass = as.numeric(as.character(mass)),
+  log_mass = log10(mass),
+       log_mass13 = log10(mass^(1/3)),
+  prop_trachea = mean_trachea_length/mass,
+            log_mtl = log10(mean_trachea_length),
+            uncertain_sex = factor(if_else(is.na(uncertain_sex), 0,1)))
+
+             
+
+
+
+
+
+#make dummy variable to allow to easily drop suspect cranes
+dat.f <- dat.f%>%
+  mutate(sus = ifelse(dat.f$taxon_name == "Antigone canadensis tabida" & dat.f$sex =="M" & dat.f$mass < 4800 | dat.f$taxon_name == "Antigone canadensis canadensis" & dat.f$mass < 2400, "sus", "chill"))%>%
+  left_join(., dat.morpho, by = "NK")%>%
+  mutate( BMI.tars = (mass/(tarsus)^2)*105,
+          BMI.trach =(mass/(mean_trachea_length^2)*105),
+          BMI.wing = (mass/(wing_chord^2)*105))
+
+
+r <- dat.f %>%
+  filter(!is.na(log_mtl))%>%
+  group_by(taxon_name, sex) %>%
+  do(model = lm(log_mtl ~ log_mass13, data=dat.f)) %>%
+  do((function(mod) {
+     data.frame(resid = residuals(mod$model))
+  })(.))
+
+r <- dat.f %>%
+  filter(!is.na(log_mtl))%>%
+  group_by(taxon_name, sex) %>%
+  do(augment(lm(log_mtl ~ log_mass13, data=.)))
+
+r <-cbind(dat.f%>%
+   filter(!is.na(log_mtl))%>%dplyr::select(NK), r)
+
+dat.f<-dat.f%>%
+  left_join(., r, by="NK")%>%
+  distinct()
+
+
+
+dat.s <- dat.f%>% filter(dat.f$sus == "chill")
+dat.s <- dat.s%>% filter(dat.s$sex %in% c("M", "F"))
+dat.baby <-dat.s%>% filter(dat.s$bursa == "Y")
+dat.s.conservative <- dat.s %>%
+  filter(!(taxon_name=="Antigone canadensis canadensis" & mass <3250  & sex=="M"),
+         !(taxon_name=="Antigone canadensis canadensis" & mean_trachea_length ==625  & sex=="F"),
+         !(taxon_name=="Antigone canadensis canadensis" & mass ==625  & sex=="F")) #after exploration below uncertain sex doesn't help much but removes some uncertainty. for lessers most uncertain points fall within "cloud" of same sex. However bursa shows several very small males  (mass <3250) falling out with females. Removing these
+
+#remove female greaters less than 4000 just one remove by NK and lesser over 4500
+dat.s <- dat.s%>%
+  filter(!NK %in% c(281809, 283503))
+
+#subset by taxon
+
+dat.l <- dat.s%>%
+  filter(dat.s$taxon_name ==  "Antigone canadensis canadensis")
+
+dat.g <- dat.s%>%
+  filter(dat.s$taxon_name != "Antigone canadensis canadensis")
+
+
+#First scale some predictors.
+dat.g$log_mass.z <- standardize(dat.g$log_mass)
+dat.g$log_mass13.z <- standardize(dat.g$log_mass13)
+dat.g$segment_count1.z <- standardize(dat.g$segment_count1)
+dat.g$segment_density.z <- standardize(dat.g$segment_density)
+dat.g$prop_trachea.z <- standardize(dat.g$prop_trachea)
+
+
+#First scale some predictors.
+dat.l$log_mass.z <- standardize(dat.l$log_mass)
+dat.l$log_mass13.z <- standardize(dat.l$log_mass13)
+dat.l$segment_count1.z <- standardize(dat.l$segment_count1)
+dat.l$segment_density.z <- standardize(dat.l$segment_density)
+dat.l$prop_trachea.z <- standardize(dat.l$prop_trachea)
+#SUBSET BY SEX AND TAXON
+
+dat.l.m <- dat.l%>%
+  filter(dat.l$sex ==  "M")
+
+dat.l.f <- dat.l%>%
+  filter(dat.l$sex == "F")
+
+dat.g.m <- dat.g%>%
+  filter(dat.g$sex ==  "M")
+
+dat.g.f <- dat.g%>%
+  filter(dat.g$sex == "F")
+
+#add Vonbank et al. assignment column from their algorithm
+dat.s<-dat.s%>%
+  left_join(., Probabilities, by = "NK")
+```
+
+# Explore Data
+
+## Visually assess outliers
+
+### Mean Trachea Length
+
+```{r, echo=F, figures-side, fig.show="hold", out.width="50%"}
+plotNormalHistogram(log10(dat.g$mean_trachea_length)) #Slightly skewed left
+plotNormalHistogram(log10(dat.l$mean_trachea_length)) #looks decent
+
+```
+
+```{r, echo=F, figures-side, fig.show="hold", out.width="50%"}
+qqPlot(log10(dat.g$mean_trachea_length)) #nothing jumping out
+qqPlot(log10(dat.l$mean_trachea_length)) #Not much jumping out maybe 21?
+
+```
+
+These quantile plots confirm no extreme outliers in mean trachea length.
+
+### Mass
+
+```{r, echo=F, figures-side, fig.show="hold", out.width="50%"}
+plotNormalHistogram(dat.g$log_mass13) #looks great
+plotNormalHistogram(dat.l$log_mass13) #looks not so decent but we expect some separation because of the two groups #remove that small male
+
+dat.l <-dat.l%>%
+  filter(mass>=2500)
+```
+
+Both look pretty solid. Removed one lesser outlier by mass
+
+```{r, echo=F, figures-side, fig.show="hold", out.width="50%"}
+qqPlot(dat.g$log_mass13)
+qqPlot(dat.l$log_mass13) #hmmm 24 & 48 look like they may need an eye
+
+```
+
+```{r}
+ggplot(dat.l%>%filter(taxon_name=="Antigone canadensis canadensis"), aes(mass, mean_trachea_length, color=uncertain_sex, shape=sex))+
+  geom_point()
+
+```
+
+```{r}
+ggplot(dat.s.conservative%>%filter(taxon_name=="Antigone canadensis tabida"), aes(mass, mean_trachea_length, color=uncertain_sex, shape=sex))+
+  geom_point()
+
+```
+
+## Descriptive Statistics
+### Full dataset
+```{R}
+#get means and standard deviations
+#by ubspecies
+
+dat.f %>%
+  group_by(taxon_name)%>%
+  summarise(count=n(),
+            mean.trachea.length = mean(mean_trachea_length, na.rm=T),
+            sd.mean.trachea.length = sd(mean_trachea_length, na.rm=T),
+            mean.mass = mean(mass, na.rm=T),
+            sd.mass = sd(mass, na.rm=T),
+            mean.BMI.tar = mean(BMI.tars, na.rm=T),
+            mean.BMI.trach = mean(BMI.trach, na.rm=T),
+            mean.BMI.wing = mean(BMI.wing, na.rm=T),
+            mean.segment = mean(segment_count2, na.rm=T),
+            sd.segment = sd(segment_count2, na.rm=T))
+
+```
+### Conservative dataset
+```{r}
+#by subspecies & sex
+t<-dat.s.conservative %>%
+  group_by(taxon_name, sex)%>%
+  filter(!bursa %in% c("yes"),
+         mass >= 2400)%>%
+  summarise(count=n(),
+            mean.trachea.length = mean(mean_trachea_length, na.rm=T),
+            sd.mean.trachea.length = sd(mean_trachea_length, na.rm=T),
+            mean.mass = mean(mass, na.rm=T),
+            sd.mass = sd(mass, na.rm=T),
+            mean.BMI.tar = mean(BMI.tars, na.rm=T),
+            mean.BMI.trach = mean(BMI.trach, na.rm=T),
+            mean.BMI.wing= mean(BMI.wing, na.rm=T),
+             mean.segment = mean(segment_count2, na.rm=T),
+            sd.segment = sd(segment_count2, na.rm=T))
+
+```
+
+### Plot mean trachea length between subspecies
+
+```{R}
+p<-dat.s %>%
+  group_by(taxon_name)%>%
+  filter(!bursa %in% c("yes"),
+         mass >= 2400)%>%
+  summarise(count=n(),
+            mean.trachea.length = mean(mean_trachea_length, na.rm=T),
+            sd.mean.trachea.length = sd(mean_trachea_length, na.rm=T),
+            mean.mass = mean(mass, na.rm=T),
+            sd.mass = sd(mass, na.rm=T))%>%
+  mutate(se.tl = sd.mean.trachea.length / sqrt(count), #95% CI
+         lower.ci.tl = mean.trachea.length - qt(1 - (0.05 / 2), count - 1) * se.tl,
+         upper.ci.tl = mean.trachea.length + qt(1 - (0.05 / 2), count - 1) * se.tl)%>%
+  ggplot(., aes(taxon_name, mean.trachea.length))+
+  geom_pointrange(mapping = aes(ymin = lower.ci.tl, ymax = upper.ci.tl))+
+  geom_point(size=4, shape=21, fill="grey65")+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  theme(axis.text.x = element_text(face = "italic"))+
+  labs(x="", y= "mean trachea length (mm)")
+p
+ggsave(p, filename = paste(getwd(), "/figures/Mean_trachea_length_subspecies_pointrange.pdf", sep=""),  bg = "transparent", height = 8, width = 5, units = "in")
+
+```
+
+```{r, echo=F, eval=F}
+#violin plot
+p<-dat.s %>%
+  group_by(taxon_name)%>%
+  ggplot(., aes(taxon_name, mean_trachea_length))+
+  geom_violin(trim=F)+
+  geom_boxplot(width=0.1)+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  theme(axis.text.x = element_text(face = "italic"))+
+  labs(x="", y= "mean trachea length (mm)")
+p
+  ggsave(p, filename = paste(getwd(), "/figures/Mean_trachea_length_subspecies_violin.pdf", sep=""),  bg = "transparent", height = 8, width = 5, units = "in")
+
+```
+
+### Plot mean trachea length between subspecies & sex
+
+```{R}
+p<-dat.s.conservative %>%
+  group_by(taxon_name, sex)%>%
+  summarise(count=n(),
+            mean.trachea.length = mean(mean_trachea_length, na.rm=T),
+            sd.mean.trachea.length = sd(mean_trachea_length, na.rm=T),
+            mean.mass = mean(mass, na.rm=T),
+            sd.mass = sd(mass, na.rm=T))%>%
+  mutate(se.tl = sd.mean.trachea.length / sqrt(count), #95% CI
+         lower.ci.tl = mean.trachea.length - qt(1 - (0.05 / 2), count - 1) * se.tl,
+         upper.ci.tl = mean.trachea.length + qt(1 - (0.05 / 2), count - 1) * se.tl)%>%
+  ggplot(., aes(taxon_name, mean.trachea.length, fill=sex))+
+  geom_pointrange(mapping = aes(ymin = lower.ci.tl, ymax = upper.ci.tl, group=sex, fill=sex))+
+  geom_point(size=4, shape=21)+
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  theme(axis.text.x = element_text(face = "italic"),
+        legend.position = c(0.2,0.85))+
+  labs(x="", y= "mean trachea length (mm)")
+p
+ggsave(p, filename = paste(getwd(), "/figures/Mean_trachea_length_subspecies_sex_pointrange.pdf", sep=""),  bg = "transparent", height = 8, width = 5, units = "in")
+
+```
+
+```{r, echo=F, eval=F}
+#violin plot
+p<-dat.s %>%
+  group_by(taxon_name, sex)%>%
+  filter(!bursa %in% c("yes"))%>%
+  ggplot(., aes(taxon_name, mean_trachea_length, fill=sex))+
+  geom_violin(trim=F)+
+  geom_boxplot(width=0.1,  position = position_dodge(width = 0.9))+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  theme(axis.text.x = element_text(face = "italic"),
+        legend.position = c(0.2,0.85))+
+  labs(x="", y= "mean trachea length (mm)")
+p
+  ggsave(p, filename = paste(getwd(), "/figures/Mean_trachea_length_subspecies_sex_violin.pdf", sep=""),  bg = "transparent", height = 4, width = 4, units = "in")
+
+```
+
+### Plot mean mass between subspecies
+
+```{r}
+p<-dat.s.conservative %>%
+  group_by(taxon_name)%>%
+  summarise(count=n(),
+            mean.trachea.length = mean(mean_trachea_length, na.rm=T),
+            sd.mean.trachea.length = sd(mean_trachea_length, na.rm=T),
+            mean.mass = mean(mass, na.rm=T),
+            sd.mass = sd(mass, na.rm=T))%>%
+  mutate(se.m = sd.mass / sqrt(count),
+         lower.ci.m = mean.mass - qt(1 - (0.05 / 2), count - 1) * se.m,
+         upper.ci.m = mean.mass + qt(1 - (0.05 / 2), count - 1) * se.m)%>%
+  ggplot(., aes(taxon_name, mean.mass))+
+  geom_pointrange(mapping = aes(ymin = lower.ci.m, ymax = upper.ci.m))+
+  geom_point(size=4, shape=21, fill="grey65")+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  theme(axis.text.x = element_text(face = "italic"))+
+  labs(x="", y= "mean mass (g)")
+p
+ggsave(p, filename = paste(getwd(), "/figures/Mass_subspecies_violin.pdf", sep=""),  bg = "transparent", height = 8, width = 5, units = "in")
+
+
+```
+
+```{r, echo=F, eval=F}
+#violin plot
+p<-dat.s.conservative %>%
+  group_by(taxon_name)%>%
+  ggplot(., aes(taxon_name, mass))+
+  geom_violin(trim=F)+
+  geom_boxplot(width=0.1)+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  theme(axis.text.x = element_text(face = "italic"))+
+  labs(x="", y= "mean trachea length (mm)")
+p
+  ggsave(p, filename = paste(getwd(), "/figures/Mass_subspecies_violin.pdf", sep=""),  bg = "transparent", height = 8, width = 5, units = "in")
+
+```
+### Plot mass by subspecies and sex
+```{r, echo=F, eval=F}
+#violin plot
+p<-dat.s %>%
+  group_by(taxon_name, sex)%>%
+  filter(!bursa %in% c("yes"),
+         mass >= 2400)%>%
+  ggplot(., aes(taxon_name, mass, fill=sex))+
+  geom_violin(trim=F)+
+  geom_boxplot(width=0.1,  position = position_dodge(width = 0.9))+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  theme(axis.text.x = element_text(face = "italic"),
+        legend.position = c(0.2,0.85))+
+  labs(x="", y= "mass (g)")
+p
+  ggsave(p, filename = paste(getwd(), "/figures/Mean_mass_subspecies_sex_violin.pdf", sep=""),  bg = "transparent", height = 4, width = 4, units = "in")
+
+```
+
+### Plot BMI.tars by subspecies and sex
+```{r, echo=F, eval=F}
+#violin plot
+p<-dat.s %>%
+  group_by(taxon_name, sex)%>%
+  filter(!bursa %in% c("yes"),
+         mass >= 2400)%>%
+  ggplot(., aes(taxon_name, BMI.tars, fill=sex))+
+  geom_violin(trim=F)+
+  geom_boxplot(width=0.1,  position = position_dodge(width = 0.9))+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  theme(axis.text.x = element_text(face = "italic"),
+        legend.position = c(0.2,0.85))+
+  labs(x="", y= "BMI (tarsus)")
+p
+  ggsave(p, filename = paste(getwd(), "/figures/BMI_tars_subspecies_sex_violin.pdf", sep=""),  bg = "transparent", height = 4, width = 4, units = "in")
+
+```
+
+### Plot BMI.trach by subspecies and sex
+```{r, echo=F, eval=F}
+#violin plot
+p<-dat.s %>%
+  group_by(taxon_name, sex)%>%
+  filter(!bursa %in% c("yes"),
+         mass >= 2400)%>%
+  ggplot(., aes(taxon_name, BMI.trach, fill=sex))+
+  geom_violin(trim=F)+
+  geom_boxplot(width=0.1,  position = position_dodge(width = 0.9))+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  theme(axis.text.x = element_text(face = "italic"),
+        legend.position = c(0.2,0.85))+
+  labs(x="", y= "BMI (trachea)")
+p
+  ggsave(p, filename = paste(getwd(), "/figures/BMI_trach_subspecies_sex_violin.pdf", sep=""),  bg = "transparent", height = 4, width = 4, units = "in")
+
+```
+
+### Plot BMI.wing by subspecies and sex
+```{r, echo=F, eval=F}
+#violin plot
+p<-dat.s %>%
+  group_by(taxon_name, sex)%>%
+  filter(!bursa %in% c("yes"),
+         mass >= 2400)%>%
+  ggplot(., aes(taxon_name, BMI.wing, fill=sex))+
+  geom_violin(trim=F)+
+  geom_boxplot(width=0.1,  position = position_dodge(width = 0.9))+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  theme(axis.text.x = element_text(face = "italic"),
+        legend.position = c(0.2,0.85))+
+  labs(x="", y= "BMI (wing chord)")
+p
+  ggsave(p, filename = paste(getwd(), "/figures/BMI_wing_subspecies_sex_violin.pdf", sep=""),  bg = "transparent", height = 4, width = 4, units = "in")
+
+```
+
+
+### Plot residual by subspecies and sex
+```{r, echo=F, eval=F}
+#violin plot
+p<-dat.s %>%
+  group_by(taxon_name, sex)%>%
+  filter(!bursa %in% c("yes"),
+         mass >= 2400)%>%
+  ggplot(., aes(taxon_name, resid, fill=sex))+
+  geom_violin(trim=F)+
+  geom_boxplot(width=0.1,  position = position_dodge(width = 0.9))+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  theme(axis.text.x = element_text(face = "italic"),
+        legend.position = c(0.2,0.85))+
+  labs(x="", y= "Residuals(log(mass ~ mtl))")
+p
+  ggsave(p, filename = paste(getwd(), "/figures/Residual_subspecies_sex_violin.pdf", sep=""),  bg = "transparent", height = 4, width = 4, units = "in")
+
+```
+
+### Plot tarsus by subspecies and sex
+```{r, echo=F, eval=F}
+#violin plot
+p<-dat.s %>%
+  group_by(taxon_name, sex)%>%
+  filter(!bursa %in% c("yes"),
+         mass >= 2400)%>%
+  ggplot(., aes(taxon_name, tarsus, fill=sex))+
+  geom_violin(trim=F)+
+  geom_boxplot(width=0.1,  position = position_dodge(width = 0.9))+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  theme(axis.text.x = element_text(face = "italic"),
+        legend.position = c(0.2,0.85))+
+  labs(x="", y= "tarsus (mm)")
+p
+  ggsave(p, filename = paste(getwd(), "/figures/Tarsus_subspecies_sex_violin.pdf", sep=""),  bg = "transparent", height = 4, width = 4, units = "in")
+
+```
+
+### Plot wing by subspecies and sex
+```{r, echo=F, eval=F}
+#violin plot
+p<-dat.s %>%
+  group_by(taxon_name, sex)%>%
+  filter(!bursa %in% c("yes"),
+         mass >= 2400)%>%
+  ggplot(., aes(taxon_name, wing_chord, fill=sex))+
+  geom_violin(trim=F)+
+  geom_boxplot(width=0.1,  position = position_dodge(width = 0.9))+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  theme(axis.text.x = element_text(face = "italic"),
+        legend.position = c(0.2,0.85))+
+  labs(x="", y= "wing chord (mm)")
+p
+  ggsave(p, filename = paste(getwd(), "/figures/Wing_chord_subspecies_sex_violin.pdf", sep=""),  bg = "transparent", height = 4, width = 4, units = "in")
+
+```
+
+### Plot anterior culmen by subspecies and sex
+```{r, echo=F, eval=F}
+#violin plot
+p<-dat.s %>%
+  group_by(taxon_name, sex)%>%
+  filter(!bursa %in% c("yes"),
+         mass >= 2400)%>%
+  ggplot(., aes(taxon_name, anterior_culmen, fill=sex))+
+  geom_violin(trim=F)+
+  geom_boxplot(width=0.1,  position = position_dodge(width = 0.9))+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  theme(axis.text.x = element_text(face = "italic"),
+        legend.position = c(0.2,0.85))+
+  labs(x="", y= "anterior culmen (mm)")
+p
+  ggsave(p, filename = paste(getwd(), "/figures/Anterior_culmen_subspecies_sex_violin.pdf", sep=""),  bg = "transparent", height = 4, width = 4, units = "in")
+
+```
+
+### Proportion trachea  by subspecies and sex
+```{r, echo=F, eval=F}
+#violin plot
+p<-dat.s %>%
+  group_by(taxon_name, sex)%>%
+  filter(!bursa %in% c("yes"),
+         mass >= 2400)%>%
+  ggplot(., aes(taxon_name, prop_trachea, fill=sex))+
+  geom_violin(trim=F)+
+  geom_boxplot(width=0.1,  position = position_dodge(width = 0.9))+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  theme(axis.text.x = element_text(face = "italic"),
+        legend.position = c(0.2,0.85))+
+  labs(x="", y= "proportion trachea")
+p
+  ggsave(p, filename = paste(getwd(), "/figures/Proportion_trachea_subspecies_sex_violin.pdf", sep=""),  bg = "transparent", height = 4, width = 4, units = "in")
+
+```
+
+### Segment count between subspecies and sex
+```{r, echo=F, eval=F}
+#violin plot
+p<-dat.s %>%
+  group_by(taxon_name, sex)%>%
+  filter(!bursa %in% c("yes"),
+         mass >= 2400,
+         segment_count2 < 350)%>%
+  ggplot(., aes(taxon_name, segment_count2, fill=sex))+
+  geom_violin(trim=F)+
+  geom_boxplot(width=0.1,  position = position_dodge(width = 0.9))+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  theme(axis.text.x = element_text(face = "italic"),
+        legend.position = c(0.15,0.9))+
+  labs(x="", y= "segment count")
+p
+  ggsave(p, filename = paste(getwd(), "/figures/Segment_count_subspecies_sex_violin.pdf", sep=""),  bg = "transparent", height = 4, width = 4, units = "in")
+
+```
+
+
+### Segment density between subspecies and sex
+```{r, echo=F, eval=F}
+#violin plot
+p<-dat.s %>%
+  group_by(taxon_name, sex)%>%
+  filter(!bursa %in% c("yes"),
+         mass >= 2400)%>%
+  ggplot(., aes(taxon_name, segment_density, fill=sex))+
+  geom_violin(trim=F)+
+  geom_boxplot(width=0.1,  position = position_dodge(width = 0.9))+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  theme(axis.text.x = element_text(face = "italic"),
+        legend.position = c(0.9,0.9))+
+  labs(x="", y= "segment density")
+p
+  ggsave(p, filename = paste(getwd(), "/figures/Segment_density_subspecies_sex_violin.pdf", sep=""),  bg = "transparent", height = 4, width = 4, units = "in")
+
+```
+
+
+### Segment count between subspecies and age
+```{r, echo=F, eval=F}
+#violin plot
+p<-dat.s %>%
+  group_by(taxon_name, sex)%>%
+  filter(mass >= 2400,
+         bursa %in% c("Y", "N"),
+         segment_count2 < 350)%>%
+  ggplot(., aes(taxon_name, segment_count2, fill=bursa))+
+  geom_violin(trim=F)+
+  geom_boxplot(width=0.1,  position = position_dodge(width = 0.9))+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  scale_fill_discrete_qualitative(palette = "Harmonic")+
+  theme(axis.text.x = element_text(face = "italic"),
+        legend.position = c(0.2,0.85))+
+  labs(x="", y= "segment count")
+p
+  ggsave(p, filename = paste(getwd(), "/figures/Segment_count_subspecies_age_violin.pdf", sep=""),  bg = "transparent", height = 4, width = 4, units = "in")
+
+```
+
+
+### Segment density between subspecies and age
+```{r, echo=F, eval=F}
+#violin plot
+p<-dat.s %>%
+  group_by(taxon_name, sex)%>%
+  filter(mass >= 2400,
+         bursa %in% c("Y", "N"))%>%
+  ggplot(., aes(taxon_name, segment_density, fill=sex))+
+  geom_violin(trim=F)+
+  geom_boxplot(width=0.1,  position = position_dodge(width = 0.9))+
+  theme_classic(base_size = 14)+
+  scale_x_discrete(labels=c("A. c. canadensis", "A. c. tabida"))+
+  scale_fill_discrete_qualitative(palette = "Harmonic")+
+  theme(axis.text.x = element_text(face = "italic"),
+        legend.position = c(0.9,0.9))+
+  labs(x="", y= "segment density")+
+  facet_wrap(.~bursa)
+p
+  ggsave(p, filename = paste(getwd(), "/figures/Segment_density_subspecies_age_violin.pdf", sep=""),  bg = "transparent", height = 4, width = 4, units = "in")
+
+```
+
+
+Stat tests for segment density
+```{r}
+t.test(segment_count2 ~ sex, data=subset(dat.l, sex %in% c("M", "F")))
+
+t.test(segment_count2 ~ sex, data=subset(dat.g, sex %in% c("M", "F")))
+
+
+t.test(segment_density ~ sex, data=subset(dat.l, sex %in% c("M", "F")))
+
+t.test(segment_density~ sex, data=subset(dat.g, sex %in% c("M", "F")))
+
+```
+
+
+
+
+
+
+## Scatter Plots
+
+```{R}
+#ggpairs(dat.f[,c(3:6,10:22)])
+#data look pretty good! Need to trim some outliers but otherwise pretty great!
+
+library(ggpmisc)
+
+f <-sort(sample(dat.s[which(dat.s$sex=="F"),],size=75))
+
+m <-sort(sample(dat.s[which(dat.s$sex=="M")],size=75))%>% pivot_wider(names_to=c("sex", "taxon_name"), values_to = "log_mtl")
+
+
+M.a.c.c <- dat.f%>%filter(sex=="M", taxon_name=="Antigone canadensis canadensis")%>%sample_n(.,34)%>%arrange(mass)%>%select(taxon_name, sex, mean_trachea_length, mass)%>%rename(mtl_male=mean_trachea_length, mass_male=mass)
+
+
+Fe.a.c.c <- dat.f%>%filter(sex=="F", taxon_name=="Antigone canadensis canadensis")%>%sample_n(.,34)%>%arrange(mass)%>%select(taxon_name, sex, mean_trachea_length, mass)%>%rename(mtl_female=mean_trachea_length, mass_female=mass)%>%select(mtl_female,mass_female)
+
+sex.plot2 <- cbind(M.a.c.c, Fe.a.c.c) 
+
+
+M.a.c.t <- dat.f%>%filter(sex=="M", taxon_name=="Antigone canadensis tabida")%>%sample_n(.,49)%>%arrange(mass)%>%select(taxon_name, sex, mean_trachea_length, mass)%>%rename(mtl_male=mean_trachea_length, mass_male=mass)
+
+
+Fe.a.c.t <- dat.f%>%filter(sex=="F", taxon_name=="Antigone canadensis tabida")%>%sample_n(.,49)%>%arrange(mass)%>%select(taxon_name, sex, mean_trachea_length, mass)%>%rename(mtl_female=mean_trachea_length, mass_female=mass)%>%select(mtl_female,mass_female)
+
+sex.act2 <- cbind(M.a.c.t, Fe.a.c.t) 
+
+sex.plot2<-rbind(sex.plot2, sex.act2)
+
+sim.sex <- sim_df(sex.plot2, n=1000, between = c("taxon_name", "sex"))
+
+p <- ggplot(sim.sex, aes(x=log10(mtl_male), y=log10(mtl_female), color=taxon_name, fill=taxon_name))+
+  geom_point(alpha=0.3, shape=21, color="transparent")+
+  geom_smooth(method = "lm")+
+  scale_fill_manual(values=c("steelblue", "grey53"))+
+  scale_color_manual(values=c("steelblue2", "grey33"))+
+  labs(x="log10(male trachea length (mm))", y="log10(female trachea length (mm))")+
+  theme_classic(base_size = 14)+
+  theme(legend.position  = "none")
+  
+p 
+
+
+
+p2 <- ggplot(sim.sex, aes(x=log10(mass_male), y=log10(mass_female), color=taxon_name, fill=taxon_name))+
+  geom_point(alpha=0.5, shape=21, color="transparent")+
+  geom_smooth(method = "lm")+
+  scale_fill_manual(values=c("steelblue", "grey53"))+
+  scale_color_manual(values=c("steelblue2", "grey33"))+
+  labs(x="log10(male mass (g))", y="log10(female mass (g))")+
+  theme_classic(base_size = 14)+
+  theme(legend.position = "none")
+  
+p2 
+
+grid.arrange(p,p2, nrow=1)
+```
+
+### Segment density by residuals mtl~logmass subspecies
+```{r, echo=F, eval=F}
+
+p<-dat.s %>%
+  group_by(taxon_name, sex)%>%
+  filter(mass >= 2400,
+         bursa %in% c("Y", "N"))%>%
+  ggplot(., aes(resid, segment_density, fill=sex, color=sex))+
+  geom_point(shape=21)+
+  geom_smooth(method = "lm")+
+  theme_classic(base_size = 14)+
+  scale_fill_discrete_qualitative(palette = "Harmonic")+
+  scale_color_discrete_qualitative(palette = "Harmonic")+
+  theme(axis.text.x = element_text(face = "italic"),
+        legend.position = c(0.9,0.9))+
+  labs(x="residuals", y= "segment density")+
+  facet_wrap(.~taxon_name)
+p
+  ggsave(p, filename = paste(getwd(), "/figures/Segment_density_subspecies_scatter.pdf", sep=""),  bg = "transparent", height = 4, width = 8, units = "in")
+
+```
+
+Mtl by mass by taxon
+```{r}
+p <- ggplot(dat.s.conservative, aes(x= log_mass13, y=log_mtl, group=sex, color=sex, fill=sex)) #substitute dat.s to remove tabida outliers, leave dat.f to see them
+p <- p + geom_point(shape=21, color= "black",size =2, alpha = 0.7)
+p <- p + geom_smooth( fill="grey68", method="lm", alpha=0.2)
+p <- p + theme_bw()
+p <- p + scale_fill_manual(values = c("#56B4E9", "#E69F00", "orchid2"))
+p <- p + scale_color_manual(values = c("#56B4E9", "#E69F00", "orchid2"))
+#p <- p + scale_y_continuous(breaks=c(2.60206, 2.69897, 2.778151, 2.845098, 2.90309), labels=c("400", "500", "600","700","800"))
+#p <- p + scale_x_continuous(breaks=c(3.477121, 3.60206,   3.69897, 3.778151, 3.845098), labels=c( "3000", "4000", "5000", "6000", "7000"))
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+p <- p + theme(axis.text=element_text(size=14),
+        axis.title=element_text(size=18),
+        legend.position = c(0.9,0.2))
+p <- p + facet_wrap(~taxon_name, scales = "free_x")
+#p <- p + theme(strip.text = element_text(face = "italic", size=14), legend.position = "none")
+p <- p + xlab(bquote((mass^1/2), "(g)"))
+p <- p + labs(x=expression(paste("log10(",mass^frac(1,3),")", " (g)"), sep=""), y= "trachea length (mm)")
+# p <- p + stat_poly_eq(aes(label = paste(..eq.label.., ..rr.label.., sep = "~~~")),
+#                label.x.npc = "right", label.y.npc = 0.15,
+#                formula = formula, parse = TRUE, size = 3)
+print(p)
+
+ggsave(p, filename = "Mtl_by_mass.png", height = 6, width = 8, units = "in", bg="transparent")
+
+```
+
+
+```{r}
+
+plot1 <- ggplot(dat.g%>%filter(bursa %in% c("N", "NA"), segment_count2 <=350), aes(x = segment_count2, y =mean_trachea_length, color = sex, fill=sex)) + 
+  geom_point(aes(color = sex), size = 3) + 
+  geom_point(shape = 1, color = "black", size = 3) + 
+  stat_smooth(method = "lm", fullrange = F) +
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  scale_color_manual(values=c("darkseagreen2", "burlywood2"))+
+  scale_y_continuous(name = "trachea length (mm)", limits=c(min(dat.g$mean_trachea_length -10), max(dat.g$mean_trachea_length +5)), expand = c(0,0))+
+  scale_x_continuous(name = "segment count", limits= c(240, 340), expand = c(0,0)) + 
+  theme_pubr() +
+  theme(legend.position = c(0.15, 0.9))
+
+dens1 <- ggplot(dat.g%>%filter(bursa %in% c("N", "NA"), segment_count2 <=350), aes(x = segment_count2, fill = sex)) + 
+  geom_density(alpha = 0.4, adjust=3) + 
+  scale_x_continuous(limits = c(240,340)) + 
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  theme_void() + 
+  theme(legend.position = "none",
+        legend.title =  element_blank())
+
+
+dens2 <- ggplot(dat.g%>%filter(bursa %in% c("N", "NA"), segment_count2 <=350), aes(x = mean_trachea_length, fill = sex)) + 
+  geom_density(alpha = 0.4, adjust=3,) + 
+  scale_x_continuous(limits=c(min(dat.g$mean_trachea_length -20), max(dat.g$mean_trachea_length +20))) + 
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  theme_void() + 
+  theme(legend.position = "none") + 
+  coord_flip()
+
+
+p<-dens1 + plot_spacer() + plot1 + dens2 + 
+  plot_layout(ncol = 2, nrow = 2, widths = c(4, 1), heights = c(1, 4))
+p
+ggsave(p, filename = "figures/mtl_by_seg_count_greater.pdf", height = 6, width = 6,  units = "in", bg="transparent")
+
+
+
+plot1 <- ggplot(dat.l%>%filter(bursa %in% c("N", "NA"), segment_count2 <=350), aes(x = segment_count2, y = mean_trachea_length, color = sex, fill=sex)) + 
+  geom_point(aes(color = sex), size = 3) + 
+  geom_point(shape = 1, color = "black", size = 3) + 
+  stat_smooth(method = "lm", fullrange = F) +
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  scale_color_manual(values=c("darkseagreen2", "burlywood2"))+
+  scale_y_continuous(name = "trachea length (mm)", limits=c(min(dat.l$mean_trachea_length -10), max(dat.l$mean_trachea_length +5)), expand = c(0,0))+
+  scale_x_continuous(name = "segment count", limits= c(240, 340), expand = c(0,0)) + 
+  theme_pubr() +
+  theme(legend.position = c(0.15, 0.9))
+
+dens1 <- ggplot(dat.l%>%filter(bursa %in% c("N", "NA"), segment_count2 <=350), aes(x = segment_count2, fill = sex)) + 
+  geom_density(alpha = 0.4, adjust=3) + 
+  scale_x_continuous(limits = c(240,340)) + 
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  theme_void() + 
+  theme(legend.position = "none",
+        legend.title =  element_blank())
+
+
+dens2 <- ggplot(dat.l%>%filter(bursa %in% c("N", "NA"), segment_count2 <=350), aes(x = mean_trachea_length, fill = sex)) + 
+  geom_density(alpha = 0.4, adjust=3) + 
+  scale_x_continuous(limits=c(min(dat.l$mean_trachea_length -10), max(dat.l$mean_trachea_length +5))) + 
+  scale_fill_manual(values=c("darkseagreen2", "burlywood2"))+
+  theme_void() + 
+  theme(legend.position = "none") + 
+  coord_flip()
+
+
+p<-dens1 + plot_spacer() + plot1 + dens2 + 
+  plot_layout(ncol = 2, nrow = 2, widths = c(4, 1), heights = c(1, 4))
+p
+ggsave(p, filename = "figures/mtl_by_seg_count_lesser.pdf", height = 6, width = 6,  units = "in", bg="transparent")
+```
+
+Interesting that the slope relationship breaks down only for male lesser sandhill cranes...
+
+Let's try and look at this first by using `faux` to simulate crane sex data and run 1000 linear models to determine the slope of each
+
+```{r, include =F}
+#define iterations
+iter <- 2000
+sim.lm <-data.frame(matrix(NA, nrow=iter, ncol=5))
+colnames(sim.lm) <- c("taxon_name", "sex", "r2", "coeff", "p")
+
+for(i in 1:iter){
+  sim.dat.l.m <- sim_df(data=dat.l.m%>%dplyr::select(log_mass, log_mtl), n=34, id="taxon_name")
+  
+  sim.l.m.lm <- lm(log_mtl~log_mass, data=sim.dat.l.m)
+  
+  sim.lm$taxon_name[i] <- dat.l.m$taxon_name[1]
+    sim.lm$sex[i] <- dat.l.m$sex[1]
+    sim.lm$r2[i] <- summary(sim.l.m.lm)$r.squared
+    sim.lm$coeff[i] <-sim.l.m.lm$coefficients[2]
+  sim.lm$p[i] <- summary(sim.l.m.lm)$coefficients[,4][2]  
+  
+    sim.dat.l.f <- sim_df(data=dat.l.f%>%dplyr::select(log_mass, log_mtl), n=34, id="taxon_name")
+  
+  sim.l.f.lm <- lm(log_mtl~log_mass, data=sim.dat.l.f)
+  
+  sim.lm$taxon_name[i] <- "Antigone canadensis"
+    sim.lm$sex[i] <- "F"
+    sim.lm$r2[i] <- summary(sim.l.f.lm)$r.squared
+    sim.lm$coeff[i] <-sim.l.f.lm$coefficients[2]
+  sim.lm$p[i] <- summary(sim.l.f.lm)$coefficients[,4][2]  
+  
+}
+
+
+```
+
+```{r}
+ggplot(dat.s, aes(x = log(prop_trachea) , y = log(mass), colour = sex))+
+    geom_point(size =2, alpha = 1)+
+    geom_smooth(aes(group=sex),method="lm")+
+    scale_colour_manual(values = c("#56B4E9", "#E69F00","orchid2"))+
+    theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())+
+    theme(axis.text=element_text(size=16),
+        axis.title=element_text(size=18))+
+    facet_wrap(~taxon_name)
+
+#Notice strong negative relationship in tabida is maybe absent in canadensis unless three furthers right candensis are due to measurement error
+#They show up again in here...
+
+p <- ggplot(dat.s, aes(x = log(mean_trachea_length) , y = log(segment_density), colour = sex))
+p <- p + geom_point(size =2, alpha = 0.7)
+p <- p + geom_smooth(aes(group=sex), method="lm")
+p <- p + scale_colour_manual(values = c("#56B4E9", "#E69F00","orchid2"))
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+p <- p + theme(axis.text=element_text(size=16),
+        axis.title=element_text(size=18))
+p <- p + facet_wrap(~taxon_name)
+print(p)
+
+#more segments in smaller trachea but proportionally longer when accounting for body size
+#clear segment density outliers maybe need to recount segments for those ~2 points.
+
+p <- ggplot(dat.s, aes(x = log(mean_trachea_length) , y = log(segment_count2), colour = sex))
+p <- p + geom_point(size =2, alpha = 0.7)
+p <- p + geom_smooth(aes(group=sex), method="lm")
+p <- p + scale_colour_manual(values = c("#56B4E9", "#E69F00","orchid2"))
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+p <- p + theme(axis.text=element_text(size=16),
+        axis.title=element_text(size=18))
+p <- p + facet_wrap(~taxon_name)
+p <- p + labs(x="mean trachea length (mm)", y= "number of segments")
+print(p)
+
+library(ggplot2)
+p <- ggplot(dat.s, aes(x = log(poserior_width), y = log(mean_trachea_length), colour = sex))
+p <- p + geom_point(size =2, alpha = 0.7)
+p <- p + geom_smooth(aes(group=sex), method="lm")
+p <- p + scale_colour_manual(values = c("#56B4E9", "#E69F00","orchid2"))
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+p <- p + theme(axis.text=element_text(size=16),
+        axis.title=element_text(size=18))
+p <- p + facet_wrap(~taxon_name)
+print(p)
+
+#no surprise tracheal width positively varies with tracheal length but much overlap between species
+
+library(ggplot2)
+p <- ggplot(dat.f, aes(x = wing_chord , y = mean_trachea_length, colour = taxon_name, shape = sex))
+p <- p + geom_point(size =3)
+
+p <- p + scale_colour_manual(values = c("grey55", "orangered3"))
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+p <- p + theme(axis.text=element_text(size=16),
+        axis.title=element_text(size=18))
+p <- p + xlim(390,600) #ther is really small outlier in wing chord
+print(p)
+
+library(ggplot2)
+p <- ggplot(dat.s, aes(x = tarsus, y = mean_trachea_length, colour = taxon_name, shape = sex))
+p <- p + geom_point(size =3)
+
+p <- p + scale_colour_manual(values = c("grey55", "orangered3"))
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+p <- p + theme(axis.text=element_text(size=16),
+        axis.title=element_text(size=18))
+print(p)
+
+
+#Look at young birds only
+
+p <- ggplot(dat.baby, aes(x = mean_trachea_length , y = mass, colour = sex)) #substitute dat.s to remove tabida outliers, leave dat.f to see them
+p <- p + geom_point(size =4, alpha = 0.5)
+p <- p + facet_grid(. ~ taxon_name)
+p <- p + scale_colour_manual(values = c("#56B4E9", "#E69F00", "orchid2"))
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+p <- p + theme(axis.text=element_text(size=16),
+        axis.title=element_text(size=18))
+print(p)
+
+#Notice three tabida that may be misclassified
+
+p <- ggplot(dat.baby, aes(x = prop_trachea , y = mass, colour = bursa, shape = taxon_name))
+p <- p + geom_point(size =3, alpha = 0.7)
+
+p <- p + scale_colour_manual(values = c("#56B4E9", "#E69F00","orchid2"))
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+p <- p + theme(axis.text=element_text(size=16),
+        axis.title=element_text(size=18))
+print(p)
+
+#Notice strong negative relationship in tabida is maybe absent in canadensis unless three furthers right candensis are due to measurement error
+#They show up again in here...
+
+p <- ggplot(dat.baby, aes(x = mean_trachea_length , y = segment_density, colour = taxon_name, shape = sex))
+p <- p + geom_point(size =3)
+
+p <- p + scale_colour_manual(values = c("grey55", "orangered3"))
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+p <- p + theme(axis.text=element_text(size=16),
+        axis.title=element_text(size=18))
+print(p)
+
+#more segments in smaller trachea btu proportionally longer when accounting for body size
+#clear segemnt density outliers maybe need to recount segments for those ~2 points.
+
+p <- ggplot(dat.baby, aes(x = mean_trachea_length , y = segment_count2, colour = bursa, shape = sex))
+p <- p + geom_point(size =3)
+p <- p + facet_grid(. ~ taxon_name)
+#p <- p + scale_colour_manual(values = c("grey55", "orangered3"))
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+p <- p + theme(axis.text=element_text(size=16),
+        axis.title=element_text(size=18))
+print(p)
+
+library(ggplot2)
+p <- ggplot(dat.baby, aes(x = poserior_width , y = mean_trachea_length, colour = taxon_name, shape = sex))
+p <- p + geom_point(size =3)
+
+p <- p + scale_colour_manual(values = c("grey55", "orangered3"))
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+p <- p + theme(axis.text=element_text(size=16),
+        axis.title=element_text(size=18))
+print(p)
+
+#no surprise tracheal width positively varies with tracheal length but much overlap between species
+
+library(ggplot2)
+p <- ggplot(dat.baby, aes(x = wing_chord , y = mean_trachea_length, colour = taxon_name, shape = sex))
+p <- p + geom_point(size =3)
+
+p <- p + scale_colour_manual(values = c("grey55", "orangered3"))
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+p <- p + theme(axis.text=element_text(size=16),
+        axis.title=element_text(size=18))
+p <- p + xlim(390,600) #ther is really small outlier in wing chord
+print(p)
+
+library(ggplot2)
+p <- ggplot(dat.baby, aes(x = tarsus, y = mean_trachea_length, colour = taxon_name, shape = sex))
+p <- p + geom_point(size =3)
+
+p <- p + scale_colour_manual(values = c("grey55", "orangered3"))
+p <- p + theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank())
+p <- p + theme(axis.text=element_text(size=16),
+        axis.title=element_text(size=18))
+print(p)
+
+#3d scatter plot
+scatter3d(x = dat.s$log_mass, y = dat.s$log_mtl, z = log(dat.s$segment_count2), groups=dat.s$taxon_name, grid=FALSE, fit = "smooth", surface=FALSE)
+```
+
+# Bootstrap slopes
+
+```{R}
+
+#slopes by species
+boot.s.l <- boot.slope.bca(dat.l$log_mtl, dat.l$log_mass, null.hyp = NULL, R = 10000)
+boot.s.g <- boot.slope.bca(dat.g$log_mtl, dat.g$log_mass, null.hyp = NULL, R = 10000)
+
+#Intercepts
+# Bootstrap 95% CI for regression coefficients
+# function to obtain regression weights
+bs <- function(formula, data, indices) {
+  d <- data[indices,] # allows boot to select sample
+  fit <- lm(formula, data=d)
+  return(coef(fit)[1])
+}
+
+# bootstrapping with 10000 replications
+lm.g.b <- boot(data=dat.g, statistic=bs,
+   R=10000, formula=log_mtl~log_mass)
+lm.l.b <- boot(data=dat.l, statistic=bs,
+   R=10000, formula=log_mtl~log_mass)
+
+
+boot.df <-data.frame(matrix(NA, nrow=20000, ncol=3))
+
+boot.df$X3 <-c(lm.l.b$t[,1], lm.g.b$t[,1])
+boot.df$X2<-c(boot.s.l$Boot.values, boot.s.g$Boot.values)
+boot.df$X1 <- rep(c("lesser", "greater"), each =10000)
+```
+
+## Plot Bootstrapped Slope
+
+```{R}
+p.s <-ggplot(boot.df, aes(x = X2, y = X1, fill = X1)) +
+        #geom_density_ridges(alpha = 0.7)+
+        stat_density_ridges(quantile_lines = TRUE, quantiles = 2, alpha = 0.7)+
+        labs(x="boostrapped slope(log trachea length ~ log mass)",y="subspecies")+
+        scale_fill_manual(values = c("dodgerblue2", "slateblue2"))+
+        theme(axis.text=element_text(size=16),
+        axis.title=element_text(size=18),panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none")
+plot(p.s)
+
+
+grid.arrange(p.i, p.s, nrow=2)
+```
+
+```{R}
+#slopes by sex and species
+boot.s.l.m <- boot.slope.bca(dat.l.m$log_mtl, dat.l.m$log_mass, null.hyp = NULL, R = 10000)
+boot.s.l.f <- boot.slope.bca(dat.l.f$log_mtl, dat.l.f$log_mass, null.hyp = NULL, R = 10000)
+boot.s.g.m <- boot.slope.bca(dat.g.m$log_mtl, dat.g.m$log_mass, null.hyp = NULL, R = 10000)
+boot.s.g.f <- boot.slope.bca(dat.g.f$log_mtl, dat.g.f$log_mass, null.hyp = NULL, R = 10000)
+
+#Intercepts
+# Bootstrap 95% CI for regression coefficients
+# function to obtain regression weights
+#Already wrote function above
+
+# bootstrapping with 10000 replications
+lm.g.m.b <- boot(data=dat.g.m, statistic=bs,
+   R=10000, formula=log_mtl~log_mass)
+lm.g.f.b <- boot(data=dat.g.f, statistic=bs,
+   R=10000, formula=log_mtl~log_mass)
+lm.l.m.b <- boot(data=dat.l.m, statistic=bs,
+   R=10000, formula=log_mtl~log_mass)
+lm.l.f.b <- boot(data=dat.l.f, statistic=bs,
+   R=10000, formula=log_mtl~log_mass)
+
+
+boot.l.df <-data.frame(matrix(NA, nrow=20000, ncol=3))
+
+boot.l.df$X3 <-c(lm.l.m.b$t[,1], lm.l.f.b$t[,1])
+boot.l.df$X2<-c(boot.s.l.m$Boot.values, boot.s.l.f$Boot.values)
+boot.l.df$X1 <- rep(c("male", "female"), each =10000)
+
+boot.g.df <-data.frame(matrix(NA, nrow=20000, ncol=3))
+
+boot.g.df$X3 <-c(lm.g.m.b$t[,1], lm.g.f.b$t[,1])
+boot.g.df$X2<-c(boot.s.g.m$Boot.values, boot.s.g.f$Boot.values)
+boot.g.df$X1 <- rep(c("male", "female"), each =10000)
+
+p.s.l <-ggplot(boot.l.df, aes(x = X2, y = X1, fill = X1)) +
+        #geom_density_ridges(alpha = 0.7)+
+        stat_density_ridges(quantile_lines = TRUE, quantiles = 2, alpha = 0.7)+
+        labs(x="slope (log trachea length ~ log mass)",y="sex")+
+        scale_fill_manual(values = c("#56B4E9", "#E69F00", "orchid2"))+
+        coord_cartesian(clip = "off") +
+        theme(axis.text=element_text(size=14),
+        axis.title=element_text(size=18),panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none")+
+   theme_classic()
+plot(p.s.l)
+
+p.s.g <-ggplot(boot.g.df, aes(x = X2, y = X1, fill = X1)) +
+        #geom_density_ridges(alpha = 0.7)+
+        stat_density_ridges(quantile_lines = TRUE, quantiles = 2, alpha = 0.7)+
+        labs(x="slope (log trachea length ~ log mass)",y="sex")+
+        scale_fill_manual(values = c("#56B4E9", "#E69F00", "orchid2"))+
+        coord_cartesian(clip = "off") +
+        theme(axis.text=element_text(size=14),
+        axis.title=element_text(size=18),panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none")+
+   theme_classic()
+plot(p.s.g)
+
+p.i.l <-ggplot(boot.l.df, aes(x = X3, y = X1, fill = X1)) +
+        #geom_density_ridges(alpha = 0.7)+
+        stat_density_ridges(quantile_lines = TRUE, quantiles = 2, alpha = 0.7)+
+        labs(x=" intercept (log trachea length ~ log mass)",y="sex")+
+        ggtitle("Lesser")+
+        coord_cartesian(clip = "off") +
+        scale_fill_manual(values = c("#56B4E9", "#E69F00", "orchid2"))+
+        theme(axis.text=element_text(size=10), plot.title = element_text(hjust = 0.5),
+        axis.title=element_text(size=12),panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none")+
+     theme_classic()
+plot(p.i.l)
+
+p.i.g <-ggplot(boot.g.df, aes(x = X3, y = X1, fill = X1)) +
+        #geom_density_ridges(alpha = 0.7)+
+        stat_density_ridges(quantile_lines = TRUE, quantiles = 2, alpha = 0.7)+
+        labs(x="intercept (log trachea length ~ log mass)",y="sex")+
+        ggtitle("Greater")+
+        scale_fill_manual(values = c("#56B4E9", "#E69F00", "orchid2"))+
+        coord_cartesian(clip = "off") +
+        theme(axis.text=element_text(size=14), plot.title = element_text(hjust = 0.5),
+        axis.title=element_text(size=18),panel.grid.major = element_blank(), panel.grid.minor = element_blank(), legend.position = "none")+
+  theme_classic()
+plot(p.i.g)
+
+ggsave(p.s.g, filename = "greater_slope_mass_MTL.png", height = 6, width = 8, units = "in", bg="transparent")
+
+ggsave(p.s.l, filename = "lesser_slope_mass_MTL.png", height = 6, width = 8, units = "in", bg="transparent")
+
+
+grid.arrange(p.i.l,p.i.g, p.s.l, p.s.g, nrow=2)
+
+g <-grid.arrange(p.i.l,p.i.g, nrow=2)
+ggsave(g, filename = "intercept_mass_MTL.png", height = 6, width = 8, units = "in", bg="transparent")
+
+#Lets do anova of slopes
+#lesser
+lm.s.l <- lm(log_mtl ~ log_mass*sex, data=dat.l)
+summary(lm.s.l)
+anova(lm.s.l)
+simple_slopes(lm.s.l)
+
+# Obtain slopes
+lm.s.l$coefficients
+lm.s.l.lst <- lstrends(lm.s.l, "sex", var="log_mass")
+lm.s.l.lst
+
+# Compare slopes
+pairs(lm.s.l.lst)
+
+#greaters
+
+lm.s.g <- lm(log_mtl ~ log_mass*sex, data=dat.g)
+anova(lm.s.g)
+
+# Obtain slopes
+lm.s.g$coefficients
+lm.s.g.lst <- lstrends(lm.s.g, "sex", var="log_mtl")
+lm.s.g.lst
+simple_slopes(lm.s.g)
+
+# Compare slopes
+pairs(lm.s.g.lst)
+
+lm.f <- lm(log_mtl ~log_mass*sex*taxon_name, data=dat.f)
+anova(lm.f)
+
+# Obtain slopes
+lm.f$coefficients
+lm.s.f.lst <- lstrends(lm.f, "sex", var="log_mass")
+lm.s.f.lst
+
+# Compare slopes
+pairs(lm.s.f.lst)
+
+```
+
+# PCA
+
+```{R}
+install_github('sinhrks/ggfortify')
+library(ggfortify)
+
+log.MP.f <- dat.s[, c(4, 6,7, 12:18,20)]
+log.MP.f <- na.omit(log.MP.f)
+log.MP <- log(log.MP.f[, 3:11])
+MP.sp <- log.MP.f[, 1:2]
+MP.pca <- prcomp(log.MP,
+                 center = TRUE,
+                 scale. = TRUE) 
+print(MP.pca)
+plot(MP.pca, type = "l")
+summary(MP.pca)
+predict(MP.pca, 
+        
+        newdata=tail(log.MP, 2))
+ 
+PCA_plot<-as.data.frame(MP.pca$x[,1:2])
+PCA_plot[,3:4] <- MP.sp
+
+g<-ggplot(PCA_plot, aes(x=PC1, y=PC2, fill = sex))+
+  geom_point(shape=21, size=2)+
+  scale_fill_manual(values=c("darkorchid2", "goldenrod2"))+
+  theme_classic(base_size = 14)+
+  facet_wrap(.~taxon_name)
+g
+
+ggsave(g, filename = "Crane_morph_PCA.pdf", height = 6, width = 8, units = "in")
+
+
+
+
+#ggbiplot
+library(devtools)
+install_github("vqv/ggbiplot")
+require("ggbiplot")
+#require("vqv")
+
+
+
+log.MP.f <- dat.g[, c(6:7,9:18)]
+log.MP.f <- na.omit(log.MP.f)
+log.MP <- log(log.MP.f[, 2:12])
+MP.sp <- log.MP.f[, 1]
+MP.pca <- prcomp(log.MP,
+                 center = TRUE,
+                 scale. = TRUE) 
+print(MP.pca)
+plot(MP.pca, type = "l")
+summary(MP.pca)
+predict(MP.pca, 
+        
+        newdata=tail(log.MP, 2))
+ 
+#find distances between greater sexes
+
+df.g.pca.x <- as.data.frame(MP.pca$x)
+df.g.pca.x$groups <- MP.sp
+pca.centroids <- aggregate(df.g.pca.x[,1:11], list(Type = df.g.pca.x$groups), mean)
+
+#euclidean
+dist(rbind(pca.centroids[pca.centroids$Type == "M",2:3],pca.centroids[pca.centroids$Type == "F",2:3]), method = "euclidean")
+
+#manhattan
+dist(rbind(pca.centroids[pca.centroids$Type == "M",2:3],pca.centroids[pca.centroids$Type == "F",2:3]), method = "manhattan")
+
+g <- ggbiplot(MP.pca, obs.scale = 1, var.scale = 1, ellipse = TRUE, 
+              groups = MP.sp[,2], circle = FALSE)
+g <- g + geom_point(aes(color = factor(MP.sp[,2])), size =2, alpha=0.2)
+#g <- g + scale_color_discrete(name = '')
+g <- g + theme(legend.direction = 'horizontal', 
+               legend.position = 'top')
+g <- g + theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=0.5),
+    panel.background = element_blank())
+g <- g + theme(axis.text=element_text(size=14, face="bold"),
+    axis.title=element_text(size=14))
+g <- g + xlim(-3, 3) + ylim(-3, 3)
+g <- g + scale_color_manual(name="sex", values=c("#E69F00", "#56B4E9"))
+print(g)
+
+
+
+
+log.MP.f <- dat.l[, c(6:7,9:18)]
+log.MP.f <- na.omit(log.MP.f)
+log.MP <- log(log.MP.f[, 2:12])
+MP.sp <- log.MP.f[, 1]
+MP.pca <- prcomp(log.MP,
+                 center = TRUE,
+                 scale. = TRUE) 
+print(MP.pca)
+plot(MP.pca, type = "l")
+summary(MP.pca)
+predict(MP.pca, 
+        
+        newdata=tail(log.MP, 2))
+
+#find distances between greater sexes
+
+df.l.pca.x <- as.data.frame(MP.pca$x)
+df.l.pca.x$groups <- MP.sp
+pca.centroids <- aggregate(df.l.pca.x[,1:11], list(Type = df.l.pca.x$groups), mean)
+
+#euclidean
+dist(rbind(pca.centroids[pca.centroids$Type == "M",2:3],pca.centroids[pca.centroids$Type == "F",2:3]), method = "euclidean")
+
+#manhattan
+dist(rbind(pca.centroids[pca.centroids$Type == "M",2:3],pca.centroids[pca.centroids$Type == "F",2:3]), method = "manhattan")
+ 
+g2 <- ggbiplot(MP.pca2, obs.scale = 1, var.scale = 1, ellipse = TRUE, 
+              groups = MP.sp2[,2], circle = FALSE)
+g2 <- g2 + geom_point(aes(color = factor(MP.sp2[,2])), size =2, alpha=0.2)
+#g2 <- g2 + scale_color_discrete(name = '')
+g2 <- g2 + theme(legend.direction = 'horizontal', 
+               legend.position = 'top')
+g2 <- g2 + theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_rect(colour = "black", fill=NA, size=0.5),
+    panel.background = element_blank())
+g2 <- g2 + theme(axis.text=element_text(size=14, face="bold"),
+    axis.title=element_text(size=14))
+g2 <- g2 + xlim(-3, 3) + ylim(-3, 3)
+g2 <- g2 + scale_color_manual(name="sex", values=c("#E69F00", "#56B4E9"))
+print(g2)
+
+g<-grid.arrange(g, g2, nrow=1)
+ggsave(g, filename = "Crane_Trachea_morph_PCA.pdf", height = 6, width = 8, units = "in")
+
+
+#now bind PC1 and d.ev.else to get baysian modeling dataframe
+brms.pc <- cbind(d.pca$x[,1:3], d.ev.else)
+
+```
+
+# Data Diagnsotics for Model
+
+```{R}
+#Check normality
+
+qqPlot(dat.s$log_mass)
+hist(dat.s$log_mass) #weird but expected given two subspecies
+
+qqPlot(dat.s$mean_trachea_length)
+hist(dat.s$mean_trachea_length) #fucking beautiful
+
+qqPlot(dat.s$log_mtl)
+hist(dat.s$log_mtl)
+
+qqPlot(dat.s$segment_count2) #two outliers these are tabida I think...
+hist(dat.s$segment_count2) #fucking beautiful
+
+qqPlot(dat.s$anterior_width)
+hist(dat.s$anterior_width) #Great
+
+qqPlot(dat.s$poserior_width)
+hist(dat.s$poserior_width) #Amazing
+
+qqPlot(dat.s$width._1st_curve)
+hist(dat.s$width._1st_curve) #Great
+
+qqPlot(dat.s$width_2nd_curve)
+hist(dat.s$width_2nd_curve) #Great
+
+qqPlot(dat.s$width_straight_mdpt)
+hist(dat.s$width_straight_mdpt) #Acceptable
+
+qqPlot(dat.s$mass_trachea.syrinx) #little funky at tail but probably ok
+hist(dat.s$mass_trachea.syrinx)
+
+qqPlot(dat.s$segment_density) #outlier(s)? probably those high counts in tabida
+hist(dat.s$segment_density)
+
+qqPlot(dat.s$prop_trachea)  #mass show up here again.
+hist(dat.s$prop_trachea)
+```
+
+# GLM
+
+```{R}
+#fit intercept only model
+int.mtl <- glm(log_mtl ~ 1, data=dat.s, family="gaussian")
+summary(int.mtl) #AIC -509.81
+
+#Diagnostics
+plot(int.mtl) #eh intercept only... sux
+
+#fit mass and trachea only model
+mass.mtl <- glm(log_mtl ~ log_mass, data=dat.s, family="gaussian")
+summary(mass.mtl) #AIC -617.02
+
+#Diagnostics
+plot(mass.mtl) #ok
+
+#fit mass, trachea, and subspecies model
+taxon.mtl <- glm(log_mtl ~ log_mass + taxon_name, data=dat.s, family="gaussian")
+summary(taxon.mtl) #AIC -641.84
+
+#Diagnostics
+plot(taxon.mtl) #better
+
+#fit mass, trachea, subspecies and sex model
+taxon.sex.mtl <- glm(log_mtl ~ log_mass + taxon_name + sex, data=dat.s, family="gaussian")
+summary(taxon.sex.mtl) #AIC -656.9
+
+#Diagnostics
+plot(taxon.sex.mtl) #better
+
+#fit full model without random effect of individual
+full.mtl <- glm(log_mtl ~ log_mass + sex + taxon_name:sex, data=dat.s, family="gaussian")
+summary(full.mtl) #-656.49
+
+#Diagnostics
+plot(full.mtl) #fucking beautiful
+
+#Fit full model with random effect of individual
+dat.s$id <- seq_len(nrow(dat.s))
+full.r.mtl <- glm(log_mtl ~ log_mass + sex + bursa + taxon_name:sex + (1|id), data=dat.s, family="gaussian")
+summary(full.r.mtl) #not changing anything probably inappropriate
+
+#Diagnostics
+plot(full.r.mtl) #fucking beautiful
+
+```
+
+# Test intercepts
+
+```{R}
+mod = lm(log_mtl ~ log_mass+sex, data = dat.g)
+summary(mod)
+
+mod2 = lm(log_mtl ~ log_mass*sex, data = dat.l)
+summary(mod2)
+
+mod3 = lm(log_mtl ~ log_mass+sex+taxon_name, data = dat.s)
+summary(mod3)
+ 
+library("emmeans")
+(emm = emmeans(mod, "sex", at = list(log_mtl = 0)))
+pairs(emm)
+(emm = emmeans(mod2, "sex", at = list(log_mtl = 0)))
+pairs(emm)
+
+(emm = emmeans(mod3, "sex", at = list(log_mtl = 0)))
+pairs(emm)
+
+
+mod.g.m <- lm(mean_trachea_length ~mass, data=dat.g.m)
+mod.g.f <- lm(mean_trachea_length ~mass, data=dat.g.f)
+
+mod.l.m <- lm(mean_trachea_length ~mass, data=dat.l.m)
+mod.l.f <- lm(mean_trachea_length ~mass, data=dat.l.f)
+
+min.g.m <- min(dat.g.m$mass) #male greaters set minimum overlap to get intercept value
+g.m.i <-coef(mod.g.m)[1] + min.g.m*coef(mod.g.m)[2]
+g.f.i <-coef(mod.g.f)[1] + min.g.m*coef(mod.g.f)[2]
+
+
+min.l.m <- min(dat.l.m$mass) #lesser males set overlapping minimum here
+l.m.i <-coef(mod.l.m)[1] + min.l.f*coef(mod.l.m)[2]
+l.f.i <-coef(mod.l.f)[1] + min.l.f*coef(mod.l.f)[2]
+
+
+
+
+SSD.index.g <- 1 + (g.m.i - g.f.i)/(g.f.i)
+
+SSD.index.l <- 1 + (l.m.i - l.f.i)/(l.f.i)
+
+
+```
+
+# Bayesian Models
+## MTL ~ Mass
+### Greaters only (Intercept Only)
+
+```{R}
+
+#dat.g <- dat.g%>%
+#  filter(bursa %in% c("N", "N "))
+
+#use this to get idea of priors then set your own!!
+# priors <-get_prior(log_mtl ~ 1,
+#                    data = dat.g, family = gaussian())
+
+m0.g <- brm(
+  formula = bf(log_mtl ~ 1),
+  data = dat.g,
+  family = skew_normal(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+       prior(student_t(3, 0, 2.5), "sigma")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(m0.g, file=paste(getwd(),"/models/", "crane_trachea_greater_intercept_only_fam_gaussian.RData", sep="")) # save model
+
+#load("crane_trachea_greater_intercept_only_fam_gaussian.RData") # If loading from pre-saved file and not re-running
+
+# pp check
+pp_check(m0.g, ndraws = 100) 
+pp_check(m0.g, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(m0.g, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(m0.g)
+
+# pairwise plots
+pairs(m0.g)
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+mcmc_plot(m0.g)
+
+# export predictions
+predict(m0.g, summary=FALSE, ndraws = 100) %>% 
+  write.csv("greaters_int_only_dist_draws.csv")
+
+#Explanation of what mcmc_plot output below means: #https://cran.r-project.org/web/packages/bayesplot/vignettes/plotting-mcmc-draws.html
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(m0.g)[,-2])
+
+```
+
+### Greaters only (Additive no sex)
+
+```{R}
+
+#use this to get idea of priors then set your own!!
+# priors <-get_prior(log_mtl ~ 1 + log_mass.z,
+#                    data = dat.g, family = gaussian())
+
+m1.a.g <- brm(
+  formula = bf(log_mtl ~ 1 + log_mass.z),
+  data = dat.g,
+  family = skew_normal(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  #prior = c(
+  #     prior(normal(0, 10), "Intercept"),
+  #     prior(cauchy(0, 2.5), "sigma")),
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+       prior(student_t(3, 0, 2.5), "sigma"),
+     prior(normal(0,5), class ="b")),
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(m1.a.g,file=paste(getwd(), "/models/", "crane_trachea_greater_additive_no_sex_fam_gaussian.RData", sep="")) # save model
+
+#load("crane_trachea_greater_additive_no_sex_fam_gaussian.RData") # If loading from pre-saved file and not re-running
+
+# pp check
+pp_check(m1.a.g, ndraws = 100) 
+pp_check(m1.a.g, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(m1.a.g, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(m1.a.g)
+
+# pairwise plots
+pairs(m1.f.a.g)
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+mcmc_plot(m1.a.g)
+mcmc_plot(m1.a.g,
+           pars = c("b_log.mass.z", "b_sexM"),
+           prob_outer = 0.95)
+
+plot(conditional_effects(m1.a.g), points = F) 
+
+# export predictions
+# predict(m1.a.g, summary=FALSE, ndraws = 100) %>% 
+#   write.csv("greaters_no_sex_additive dist_draws.csv")
+
+#Explanation of what mcmc_plot output below means: #https://cran.r-project.org/web/packages/bayesplot/vignettes/plotting-mcmc-draws.html
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(m1.a.g)[,-2])
+
+```
+
+### Greaters only (Additive mass & sex)
+
+```{R}
+
+#use this to get idea of priors then set your own!!
+# priors <-get_prior(log_mtl ~ 1 + log_mass + sex,
+#                    data = dat.g, family = gaussian())
+
+m2.a.g <- brm(
+  formula = bf(log_mtl ~ 1 + log_mass.z + sex),
+  data = dat.g,
+  family = skew_normal(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+    prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+       prior(student_t(3, 0, 2.5), "sigma"),
+     prior(normal(0,5), class="b")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(m2.a.g,file=paste(getwd(), "/models/", "crane_trachea_greater_additive_full_fam_gaussian.RData", sep="")) # save model
+
+#load("crane_trachea_greater_additive_full_fam_gaussian.RData") # If loading from pre-saved file and not re-running
+
+# pp check
+pp_check(m2.a.g, ndraws = 1000) 
+pp_check(m2.a.g, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(m2.a.g, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(m2.a.g)
+
+# pairwise plots
+pairs(m2.a.g)
+
+#Get fixed effect estimates (slope etc.../population level stuff)
+fixef(m2.a.g)
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+mcmc_plot(m2.a.g)
+mcmc_plot(m2.a.g,
+           pars = c("b_log_", "b_sexM"),
+           prob_outer = 0.95)
+
+plot(conditional_effects(m2.a.g), points = F) 
+
+
+
+#Explanation of what mcmc_plot output below means: #https://cran.r-project.org/web/packages/bayesplot/vignettes/plotting-mcmc-draws.html
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(m2.a.g)[,-2])
+
+```
+
+
+
+### Greaters only (interaction)
+
+```{R}
+
+#use this to get idea of priors then set your own!!
+# priors <-get_prior(log_mtl ~ 1 + (log_mass.z  + sex)^2,
+#                    data = dat.g, family = gaussian())
+
+m3.i.g <- brm(
+  formula = bf(log_mtl ~ 1 + (log_mass.z + sex)^2),
+  data = dat.g,
+  family = skew_normal(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  #prior = c(
+  #     prior(normal(0, 10), "Intercept"),
+  #     prior(cauchy(0, 2.5), "sigma")),
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+       prior(student_t(3, 0, 2.5), "sigma"),
+     prior(normal(0,5), class="b")),
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(m3.i.g, file=paste(getwd(), "/models/", "crane_trachea_full_interaction_greater_fam_gaussian.RData", sep="")) # save model
+
+#load(paste(getwd(), "/models/", "crane_trachea_full_interaction_greater_fam_gaussian.RData", sep="")) # If loading from pre-saved file and not re-running
+
+# pp check
+pp_check(m3.i.g, ndraws = 100) 
+pp_check(m3.i.g, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(m3.i.g, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(m3.i.g)
+
+
+# pairwise plots
+pairs(m3.i.g)
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m2.i.g)
+mcmc_plot(m3.i.g,
+           pars = c("b_log.mass.z", "b_sexM",  "b_log_mass.z:massM"),
+           prob_outer = 0.95)
+
+plot(conditional_effects(m2.i.g), points = F) 
+
+# # export predictions
+# predict(m3.i.g, summary=FALSE, ndraws = 100) %>% 
+#   write.csv("greaters_full_interaction_dist_draws.csv")
+
+#Explanation of what mcmc_plot output below means: #https://cran.r-project.org/web/packages/bayesplot/vignettes/plotting-mcmc-draws.html
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(m3.i.g)[,-2])
+
+
+
+```
+
+### Lessers only (Intercept)
+
+```{R}
+
+
+# dat.l.nb <- dat.l%>%
+#   filter(bursa %in% c("N", "N "),
+#          mass <= 4100)
+
+
+hist(dat.l$log_mtl) #This looks like shit maybe student distribution will help given the spread. After model comaprison of null model with gaussian, student, and skew_normal, gaussian comes up marginally best. using that.
+
+#use this to get idea of priors then set your own!!
+# priors <-get_prior(log_mtl ~ 1,
+#                    data = dat.l, family = gaussian())
+
+m0.l <- brm(
+  formula = bf(log_mtl ~ 1),
+  data = dat.l,
+  family = gaussian(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  #prior = c(
+  #     prior(normal(0, 10), "Intercept"),
+  #     prior(cauchy(0, 2.5), "sigma")),
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+       prior(student_t(3, 0, 2.5), "sigma")),
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+
+save(m0.l, file=paste(getwd(), "/models/", "crane_trachea_lesser_intercept_only_fam_gaussian.RData", sep="")) # save model
+
+#load("crane_trachea_lesser_intercept_only_fam_student.RData") # If loading from pre-saved file and not re-running
+
+# pp check
+pp_check(m0.l, ndraws = 100) 
+pp_check(m0.l, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(m0.l, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(m0.l)
+
+# pairwise plots
+pairs(m0.l)
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+mcmc_plot(m0.l)
+
+
+# export predictions
+predict(m0.l, summary=FALSE, ndraws = 100) %>% 
+  write.csv("lessers_intercept_only dist_draws.csv")
+
+#Explanation of what mcmc_plot output below means: #https://cran.r-project.org/web/packages/bayesplot/vignettes/plotting-mcmc-draws.html
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(m0.l)[,-2])
+
+```
+
+### Lessers only (Additive no sex)
+
+```{R}
+
+#use this to get idea of priors then set your own!!
+# priors <-get_prior(log_mtl ~ 1 + log_mass.z,
+#                    data = dat.l, family = gaussian())
+
+m1.a.l <- brm(
+  formula = bf(log_mtl ~ 1 + log_mass.z),
+  data = dat.l,
+  family = gaussian(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  #prior = c(
+  #     prior(normal(0, 10), "Intercept"),
+  #     prior(cauchy(0, 2.5), "sigma")),
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+       prior(student_t(3, 0, 2.5), "sigma"),
+     prior(normal(0,5), class="b")),
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(m1.a.l, file=paste(getwd(), "/models/", "crane_trachea_lesser_additive_no_sex_fam_gaussian.RData", sep="")) # save model
+
+#load("crane_trachea_lesser_additive_no_sex_fam_student.RData re-running
+
+# pp check
+pp_check(m1.a.l, ndraws = 100) 
+pp_check(m1.a.l, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(m1.a.l, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(m1.a.l)
+
+# pairwise plots
+pairs(m1.a.l)
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(m1.a.l,
+           variable = c("b_log.mass.z"),
+           prob_outer = 0.95)
+
+plot(conditional_effects(m1.a.l), points = F) 
+
+
+# export predictions
+# predict(m1.a.l, summary=FALSE, ndraws = 100) %>% 
+#   write.csv("greaters_no_sex_additive dist_draws.csv")
+
+#Explanation of what mcmc_plot output below means: #https://cran.r-project.org/web/packages/bayesplot/vignettes/plotting-mcmc-draws.html
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(m1.a.l)[,-2])
+
+```
+
+### Lessers only Additive Full
+
+```{R}
+
+#use this to get idea of priors then set your own!!
+# priors <-get_prior(log_mtl ~ 1 + log_mass  + sex,
+#                    data = dat.l, family = gaussian())
+
+m2.a.l <- brm(
+  formula = bf(log_mtl ~ 1 + log_mass.z + sex),
+  data = dat.l,
+  family = gaussian(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+       prior(student_t(3, 0, 2.5), "sigma"),
+     prior(normal(0,5), class="b")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(m2.a.l, file=paste(getwd(), "/models/crane_trachea_lesser_additive_mass_sex_fam_gaussian.RData", sep="")) # save model
+
+#load("crane_trachea_lesser_additive_full_fam_gaussian.RData") # If loading from pre-saved file and not re-running
+
+# pp check
+pp_check(m2.a.l, ndraws = 1000) 
+pp_check(m2.a.l, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(m2.a.l, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(m2.a.l)
+
+# pairwise plots
+pairs(m2.a.l)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(m2.a.l,
+           variable = c("b_log_mass", "b_sexM"),
+           prob_outer = 0.95)
+
+plot(conditional_effects(m2.a.l), points = F) 
+
+
+
+#Explanation of what mcmc_plot output below means: #https://cran.r-project.org/web/packages/bayesplot/vignettes/plotting-mcmc-draws.html
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(m2.a.l)[,-2])
+
+```
+
+
+### Lessers only (interaction)
+
+```{R}
+
+#use this to get idea of priors then set your own!!
+# priors <-get_prior(log_mtl ~ 1 + (log_mass.z  + sex)^2,
+#                    data = dat.l, family = gaussian())
+
+m3.i.l <- brm(
+  formula = bf(log_mtl ~ 1 + (log_mass.z + sex)^2),
+  data = dat.l,
+  family = gaussian(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+       prior(student_t(3, 0, 2.5), "sigma"),
+     prior(normal(0,5), class="b")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(m3.i.l, file=paste(getwd(), "/models", "crane_trachea_full_interaction_lessers_fam_gaussian.RData", sep="")) # save model
+
+#load(paste(getwd(), "/models", "crane_trachea_full_interaction_lessers_fam_gaussian.RData", sep="")) # If loading from pre-saved file and not re-running
+
+# pp check
+pp_check(m3.i.l, ndraws = 100) 
+pp_check(m3.i.l, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(m3.i.l, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(m3.i.l)
+
+
+# pairwise plots
+pairs(m3.i.l)
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m3.i.l)
+mcmc_plot(m3.i.l,
+           variable = c("b_log.mass.z", "b_sexM", "b_log_mass.z:massM"),
+           prob_outer = 0.95)
+
+plot(conditional_effects(m3.i.l), points = F) 
+
+
+# export predictions
+# predict(m3.i.l, summary=FALSE, ndraws = 100) %>% 
+#   write.csv("lessers_full_interaction_dist_draws.csv")
+
+#Explanation of what mcmc_plot output below means: #https://cran.r-project.org/web/packages/bayesplot/vignettes/plotting-mcmc-draws.html
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(m3.i.l)[,-2])
+
+```
+
+## Bayesian Model selection
+
+```{r}
+# Print model summaries 
+sink(paste(getwd(),"/Tables/crane_trachea_brms_model_summaries.txt", sep=""),append = TRUE)
+summary(m0.g, waic=TRUE)
+summary(m1.a.g, waic=TRUE)
+summary(m2.a.g, waic=TRUE)
+summary(m3.i.g, waic=TRUE)
+summary(m0.l, waic=TRUE)
+summary(m1.a.l, waic=TRUE)
+summary(m2.a.l, waic=TRUE)
+summary(m3.i.l, waic=TRUE)
+sink()
+# print(hct.test, prob=0.95) # change CI cut-off by adjusting prob; remember Bayesian default may not be 95%
+
+# Get model WAIC scores  
+m0.g.waic <- waic(m0.g)
+m1.a.g.waic <- waic(m1.a.g)
+m2.a.g.waic <- waic(m2.a.g)
+m3.i.g.waic <- waic(m3.i.g)
+m0.l.waic <- waic(m0.l)
+m1.a.l.waic <- waic(m1.a.l)
+m2.a.l.waic <- waic(m2.a.l)
+m3.i.l.waic <- waic(m3.i.l)
+#crane.waics <- cbind(m0.g.waic, m1.a.g.waic, m2.a.g.waic, m3.i.g.waic, m0.l.waic, m1.a.l.waic, m2.a.l.waic, m3.i.l.waic); crane.waics
+#write.csv(crane.waics, paste(getwd(),"/Tables/crane_brms_models_waics.csv", sep="")) # totally unintelligible cumbersome doc w/ all pointwise comparisons 
+
+
+#WAIC unreliable use LOOIC instead
+
+ #leave one out cross-validation, lowest is "best"
+# if 2*standard error > delta LOOIC, models aren't necessarily distinguishable
+
+library(loo)
+# greaters first
+sink(paste(getwd(),"/Tables/crane_brms_models_greaters_looic.txt", sep=""), append=FALSE)
+LOO(m0.g, m1.a.g, m2.a.g, m3.i.g, reloo=FALSE) 
+sink()
+
+
+LOO(m0.g, m1.a.g, m2.a.g, m3.i.g, reloo=FALSE, moment_match = T) 
+# Model comparisons:  Best model for greaters is additive then interaction... maybe model average?
+# Model comparisons:
+#        elpd_diff se_diff
+# m3.i.g   0.0       0.0  
+# m2.a.g  -0.1       1.4  
+# m1.a.g  -1.6       3.0  
+# m0.g   -37.3       7.5  
+library(kableExtra)
+# bm.l.loo$diffs %>%
+#   row.names() <- c()%>%
+#   kable(., digits = 2)%>%
+#   kable_styling(fixed_thead = T)
+
+#lessers
+sink(paste(getwd(),"/Tables/crane_brms_models_lessers_looic.txt", sep=""), append=FALSE)
+LOO(m0.l, m1.a.l, m2.a.l, m3.i.l, reloo=FALSE) 
+sink()
+
+LOO(m0.l, m1.a.l, m2.a.l, m3.i.l, reloo=FALSE) 
+# Model comparisons:  Interaction and additve essentially the same...
+# Model comparisons:
+#        elpd_diff se_diff
+# m2.a.l   0.0       0.0  
+# m3.i.l  -1.2       0.5  
+# m1.a.l  -4.9       4.0  
+# m0.l   -23.4       5.7  
+#Interaction is very close to additive so maybe jsutified to use that one.
+
+
+# Calculate Bayesian R^2:
+bayes_R2(m0.g) # 0.0000000000 nothing
+bayes_R2(m1.a.g) # 0.479
+bayes_R2(m2.a.g) #0.500
+bayes_R2(m3.i.g) # 0.51
+bayes_R2(m0.l)  #0.0000000000 nothing
+bayes_R2(m1.a.l) # 0.44
+bayes_R2(m2.a.l) #0.54
+bayes_R2(m3.i.l) # 0.54
+
+```
+
+## Posterior Predicitions and Contrasts
+### Greaters
+```{r}
+newdata <-dat.g%>%dplyr::select(sex, log_mtl, log_mass.z)%>%filter(!sex %in% c("UNKNOWN"))%>%droplevels()
+
+tidy_pred <- m3.i.g %>% 
+  epred_draws(newdata = newdata , ndraws = 50)
+
+#get min value for males 
+min_mass_males <- tidy_pred%>%
+  filter(sex=="M")%>%
+  group_by(sex)%>%
+  summarise(min_mass_males = min(log_mass.z))%>%
+  pull()
+
+#epred off that value
+#set up newdataframe
+newdata  <- expand_grid(sex = c("M", "F"),
+                       log_mass.z = c(min_mass_males))
+  
+
+#draw expected values from posterior: this is more of a population estimate (smaller associated error)
+
+tidy_pred <- m3.i.g %>% 
+  epred_draws(newdata = newdata)
+tidy_pred
+
+#find difference between each "pair of values
+library(dplyr)
+M.pred <- tidy_pred%>%
+  filter(sex=="M")
+
+F.pred <- tidy_pred%>%
+  filter(sex=="F")
+
+SDI.pred.g <- (M.pred$.epred -F.pred$.epred)/F.pred$.epred
+
+
+
+newdata.f <-dat.g %>%
+  group_by(sex="F") %>%
+  droplevels()%>% #drop unused but present unknown level
+  data_grid(log_mass.z = seq(from=min(dat.g[,"log_mass.z"]), to=max(dat.g[,"log_mass.z"]), len= 50))
+
+tidy_pred.f <- m3.i.g %>% 
+  predicted_draws(newdata = newdata.f )
+
+
+newdata.m <-dat.g %>%
+  group_by(sex="M") %>%
+  droplevels()%>% #drop unused but present unknown level
+  data_grid(log_mass.z = seq(from=min(dat.g[,"log_mass.z"]), to=max(dat.g[,"log_mass.z"]), len= 50))
+
+tidy_pred.m <- m3.i.g %>% 
+  predicted_draws(newdata = newdata.m )
+
+tidy.pred.contrasts <- data.frame(contrast = (tidy_pred.m$.prediction - tidy_pred.f$.prediction),
+                                  SDI =(tidy_pred.m$.prediction - tidy_pred.f$.prediction)/tidy_pred.f$.prediction,
+                                  log_mass.z = tidy_pred.f$log_mass.z)
+
+p<-tidy.pred.contrasts%>%
+  ggplot(., aes(log_mass.z, contrast))+
+  stat_ribbon(alpha=0.6, .width = c(0.5, 0.6, 0.7, 0.8, 0.9))+
+  scale_fill_brewer(palette = "Greys")+
+  scale_color_brewer(palette = "Greys")+
+  geom_hline(yintercept = 0, linetype="dashed")+
+  annotate("rect", xmin = -1.079172, xmax = 0.7982938, ymin = -0.10, ymax =  0.23,
+           alpha = .1,fill = "blue")+
+  labs(x=expression(paste("standardized(log"["10"], "mass)", sep="")), y="tracheal length contrast (M-F)")+
+  scale_y_continuous(limits = c(-0.10, 0.23))+
+  theme_cowplot()
+p
+ggsave(p, filename=paste(figures, "greater_contrasts_by_weight.pdf", sep=""), width=5.3, height=4)
+
+
+p<-tidy.pred.contrasts%>%
+  ggplot(., aes(log_mass.z, SDI))+
+  stat_ribbon(alpha=0.6, .width = c(0.5, 0.6, 0.7, 0.8, 0.9))+
+  scale_fill_brewer(palette = "Greys")+
+  scale_color_brewer(palette = "Greys")+
+  geom_hline(yintercept = 0, linetype="dashed")+
+  annotate("rect", xmin = -1.079172, xmax = 0.7982938, ymin = -0.035, ymax =  0.085,
+           alpha = .1,fill = "blue")+
+  labs(x=expression(paste("standardized(log"["10"], "mass)", sep="")), y=expression(paste("SDI"["tracheal length"])))+
+  scale_y_continuous(limits = c(-0.035, 0.085))+
+  theme_cowplot()
+p
+ggsave(p, filename=paste(figures, "greater_SDI_by_weight.pdf", sep=""), width=5.3, height=4)
+```
+### Lessers
+```{r}
+
+newdata <-dat.l%>%dplyr::select(sex, log_mtl, log_mass.z)%>%filter(!sex %in% c("UNKNOWN"))%>%droplevels()
+
+tidy_pred <- m2.a.l %>% 
+  epred_draws(newdata = newdata , ndraws=50)
+
+#get min value for males 
+min_mass_males <- tidy_pred%>%
+  filter(sex=="M")%>%
+  group_by(sex)%>%
+  dplyr::summarise(min_mass_males = min(log_mass.z))%>%
+  pull()
+
+#pred off that value
+#set up newdataframe
+newdata  <- expand_grid(sex = c("M", "F"),
+                       log_mass.z = c(min_mass_males))
+  
+
+#draw expected values from posterior: this is more of a population estimate (smaller associated error)
+
+tidy_pred <- m2.a.l %>% 
+  epred_draws(newdata = newdata )
+tidy_pred
+
+#find difference between each "pair of values
+library(dplyr)
+M.pred <- tidy_pred%>%
+  filter(sex=="M")
+
+F.pred <- tidy_pred%>%
+  filter(sex=="F")
+
+SDI.pred.l <- (M.pred$.epred -F.pred$.epred)/F.pred$.epred #original way chris suggested same as lovich and gibbons 1992 different formula terms
+
+
+newdata.f <-dat.l %>%
+  group_by(sex="F") %>%
+  droplevels()%>% #drop unused but present unknown level
+  data_grid(log_mass.z = seq(from=min(dat.l[,"log_mass.z"]), to=max(dat.l[,"log_mass.z"]), len= 50))
+
+tidy_pred.f <- m3.i.l %>% 
+  predicted_draws(newdata = newdata.f )
+
+
+newdata.m <-dat.l %>%
+  group_by(sex="M") %>%
+  droplevels()%>% #drop unused but present unknown level
+  data_grid(log_mass.z = seq(from=min(dat.l[,"log_mass.z"]), to=max(dat.l[,"log_mass.z"]), len= 50))
+
+tidy_pred.m <- m3.i.l %>% 
+  predicted_draws(newdata = newdata.m )
+
+tidy.pred.contrasts <- data.frame(contrast = tidy_pred.m$.prediction - tidy_pred.f$.prediction,
+                                  SDI = (tidy_pred.m$.prediction - tidy_pred.f$.prediction)/tidy_pred.f$.prediction,
+                                  log_mass.z = tidy_pred.f$log_mass.z)
+
+p<-tidy.pred.contrasts%>%
+  ggplot(., aes(log_mass.z, contrast))+
+  stat_ribbon(alpha=0.6, .width = c(0.5, 0.6, 0.7, 0.8, 0.9))+
+  scale_fill_brewer(palette = "Greys")+
+  scale_color_brewer(palette = "Greys")+
+  geom_hline(yintercept = 0, linetype="dashed")+
+  annotate("rect", xmin = -1.169667, xmax = 0.9255056, ymin = -0.10, ymax =  0.23,
+           alpha = .1,fill = "blue")+
+  labs(x=expression(paste("standardized(log"["10"], "mass)", sep="")), y="tracheal length contrast (M-F)")+
+  scale_y_continuous(limits = c(-0.10, 0.23))+
+  theme_cowplot()
+
+p
+ggsave(p, filename=paste(figures, "lesser_contrasts_by_weight.pdf", sep=""), width=5.3, height=4)
+
+p<-tidy.pred.contrasts%>%
+  ggplot(., aes(log_mass.z, SDI))+
+  stat_ribbon(alpha=0.6, .width = c(0.5, 0.6, 0.7, 0.8, 0.9))+
+  scale_fill_brewer(palette = "Greys")+
+  scale_color_brewer(palette = "Greys")+
+  geom_hline(yintercept = 0, linetype="dashed")+
+  annotate("rect", xmin = -1.169667, xmax = 0.9255056, ymin = -0.035, ymax =  0.085,
+           alpha = .1,fill = "blue")+
+  labs(x=expression(paste("standardized(log"["10"], "mass)", sep="")), y=expression(paste("SDI"["tracheal length"])))+
+  scale_y_continuous(limits = c(-0.035, 0.085))+
+  theme_cowplot()
+p
+ggsave(p, filename=paste(figures, "lesser_SDI_by_weight.pdf", sep=""), width=5.3, height=4)
+
+```
+
+## SDI-mtl plot
+
+```{r, echo=F}
+
+SDI.plot <- data.frame(x=SDI.pred.g, Taxon="greater")
+SDI.plot <- rbind(SDI.plot, data.frame(x=SDI.pred.l, Taxon="lesser"))
+SDI.plot%>%
+  group_by(Taxon)%>%
+  summarise(median = median(x),
+            mean= mean(x),
+            se = std.error(x),
+            lower95CI = quantile(x, probs=c(0.025)),
+            upper95CI = quantile(x, probs=c(0.975)))
+
+p<-ggplot(SDI.plot, aes(x=x,y=Taxon, fill=Taxon))+
+  stat_halfeye(fill="grey55")+
+  theme_classic(base_size = 14)+
+  #scale_fill_manual(values=c("dodgerblue2", "darkorchid1"))+
+  theme(legend.title = element_blank(),
+        legend.position = "none")+
+  labs(x=expression(paste("SDI"[italic("trachea")])), y="")
+p
+ggsave(p, filename = paste(getwd(), "/figures/", "SDI_PP_trachea_grey.pdf", sep=""), width=6, height=5)
+
+cohen.d(SDI.pred.l, SDI.pred.g)
+# d estimate: 1.28044 (large)
+# 95 percent confidence interval:
+#    lower    upper 
+# 1.232325 1.328555 
+```
+
+
+
+
+## Bayesian catagorical model for mass SDI
+### Null model Lesser
+```{r}
+#use this to get idea of priors then set your own!!
+# priors <-get_prior(log_mass ~ 1 + log_mtl  + sex,
+#                    data = dat.l, family = gaussian())
+
+m.c.n.l <- brm(
+  formula = bf(log_mass ~ 1),
+  data = dat.l,
+  family = skew_normal(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+       prior(student_t(3, 0, 2.5), "sigma")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(m.c.n.l, file=paste(getwd(), "/models/", "crane_mass_lesser_catagorical_null_fam_skew_normal.RData", sep="")) # save model
+
+#load("crane_mass_lesser_catagorical_null_fam_gaussian.RData") # If loading from pre-saved file and not re-running
+
+# pp check
+pp_check(m.c.n.l, ndraws = 1000) 
+pp_check(m.c.n.l, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(m.c.n.l, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(m.c.n.l)
+
+# pairwise plots
+pairs(m.c.n)
+
+
+
+
+```
+
+
+
+### Sex only model
+```{r}
+#use this to get idea of priors then set your own!!
+# priors <-get_prior(log_mass ~ 1 + log_mtl  + sex,
+#                    data = dat.l, family = gaussian())
+
+hist(dat.l$log_mass)
+
+m.c.s.l <- brm(
+  formula = bf(log_mass ~ 1 + sex, sigma ~ sex),
+  data = dat.l,
+  family = skew_normal(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(m.c.s.l, file=paste(getwd(), "/models/", "crane_mass_lesser_catagorical_sex_only_fam_skew_normal.RData", sep="")) # save model
+
+#load("crane_mass_lesser_catagorical_sex_only_fam_gaussian.RData") # If loading from pre-saved file and not re-running
+
+# pp check
+pp_check(m.c.s.l, ndraws = 1000) 
+pp_check(m.c.s.l, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(m.c.s.l, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(m.c.s.l)
+
+# pairwise plots
+pairs(m.c.s.l)
+
+
+mcmc_plot(m.c.s.l)
+conditional_effects(m.c.s.l)
+
+```
+
+### Full dataset categorical nested models
+
+
+### Model selection
+
+```{r}
+# Print model summaries 
+sink(paste(getwd(),"/Tables/crane_mass_brms_model_summaries.txt", sep=""),append = TRUE)
+summary(m.c.n.l, waic=TRUE)
+summary(m.c.s.l, waic=TRUE)
+
+sink()
+# print(hct.test, prob=0.95) # change CI cut-off by adjusting prob; remember Bayesian default may not be 95%
+
+# Get model WAIC scores  
+m.c.n.waic <- waic(m.c.n.l)
+m.c.s.waic <- waic(m.c.s.l)
+
+
+#crane.waics <- cbind(m0.g.waic, m1.a.g.waic, m2.a.g.waic, m3.i.g.waic, m0.l.waic, m1.a.l.waic, m2.a.l.waic, m3.i.l.waic); crane.waics
+#write.csv(crane.waics, paste(getwd(),"/Tables/crane_brms_models_waics.csv", sep="")) # totally unintelligible cumbersome doc w/ all pointwise comparisons 
+
+
+#WAIC unreliable use LOOIC instead
+
+ #leave one out cross-validation, lowest is "best"
+# if 2*standard error > delta LOOIC, models aren't necessarily distinguishable
+
+
+
+LOO(m.c.n.l, m.c.s.l, reloo=FALSE) 
+
+# Model comparisons:
+#         elpd_diff se_diff
+# m.c.s.l   0.0       0.0  
+# m.c.n.l -10.9       4.1 
+ #Bayes R2
+bayes_R2(m.c.n.l) # 0.0000000000 nothing
+bayes_R2(m.c.s.l) #0.31
+
+
+
+```
+
+### Predicitons (top model)
+```{r}
+newdata <-dat.l%>%dplyr::select(sex, log_mass)%>%filter(!sex %in% c("UNKNOWN"))%>%droplevels()
+
+tidy_pred <- m.c.s.l %>% 
+  epred_draws(newdata = newdata )
+
+#get median value for males 
+tidy_mass_males <- tidy_pred%>%
+  filter(sex=="M")%>%
+  group_by(sex)
+
+tidy_mass_females <- tidy_pred%>%
+  filter(sex=="F")%>%
+  group_by(sex)%>%
+  sample_n(size=nrow(tidy_mass_males))
+
+
+
+SDI.mass.pred.l.m <- (tidy_mass_males$.epred -tidy_mass_females$.epred)/tidy_mass_females$.epred
+
+
+mean(SDI.mass.epred.l.m)
+```
+
+### Null model greater
+```{r}
+#use this to get idea of priors then set your own!!
+# priors <-get_prior(log_mass ~ 1 + log_mtl  + sex,
+#                    data = dat.l, family = gaussian())
+
+hist(dat.g$log_mass)
+# stick with gaussian
+
+m.c.n.g <- brm(
+  formula = bf(log_mass ~ 1),
+  data = dat.g,
+  family = gaussian(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+       prior(student_t(3, 0, 2.5), "sigma")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(m.c.n.g, file=paste(getwd(), "/models/", "crane_mass_greater_catagorical_null_fam_gaussian.RData", sep="")) # save model
+
+#load("crane_mass_greater_catagorical_null_fam_gaussian.RData") # If loading from pre-saved file and not re-running
+
+# pp check
+pp_check(m.c.n.g, ndraws = 1000) 
+pp_check(m.c.n.g, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(m.c.n.g, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(m.c.n.g)
+
+# pairwise plots
+pairs(m.c.n.g)
+
+
+
+
+```
+
+
+
+### Sex only model
+```{r}
+#use this to get idea of priors then set your own!!
+# priors <-get_prior(log_mass ~ 1 + log_mtl  + sex,
+#                    data = dat.l, family = gaussian())
+
+m.c.s.g <- brm(
+  formula = bf(log_mass ~ 1 + sex),
+  data = dat.g,
+  family = gaussian(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+       prior(student_t(3, 0, 2.5), "sigma")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(m.c.s.g, file=paste(getwd(), "/models/", "crane_mass_greater_catagorical_sex_only_fam_gaussian.RData", sep="")) # save model
+
+#load("crane_mass_greater_catagorical_sex_only_fam_gaussian.RData") # If loading from pre-saved file and not re-running
+
+# pp check
+pp_check(m.c.s.g, ndraws = 1000) 
+pp_check(m.c.s.g, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(m.c.s.g, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(m.c.s.g)
+
+# pairwise plots
+pairs(m.c.s.g)
+
+
+
+
+```
+
+
+### Model selection
+
+```{r}
+
+# Get model WAIC scores  
+waic(m.c.n.g)
+waic(m.c.s.g)
+
+
+#crane.waics <- cbind(m0.g.waic, m1.a.g.waic, m2.a.g.waic, m3.i.g.waic, m0.l.waic, m1.a.l.waic, m2.a.l.waic, m3.i.l.waic); crane.waics
+#write.csv(crane.waics, paste(getwd(),"/Tables/crane_brms_models_waics.csv", sep="")) # totally unintelligible cumbersome doc w/ all pointwise comparisons 
+
+
+#WAIC unreliable use LOOIC instead
+
+ #leave one out cross-validation, lowest is "best"
+# if 2*standard error > delta LOOIC, models aren't necessarily distinguishable
+
+
+
+LOO(m.c.n.g, m.c.s.g, reloo=FALSE) 
+
+# Model comparisons:
+#         elpd_diff se_diff
+# m.c.s.g   0.0       0.0  
+# m.c.n.g -23.2       5.0  
+
+ #Bayes R2
+bayes_R2(m.c.n.g) # 0.0000000000 nothing
+bayes_R2(m.c.s.g) #0.34
+
+
+
+```
+
+### Predicitons (top model)
+```{r}
+newdata <-dat.g%>%dplyr::select(sex, log_mass)%>%filter(!sex %in% c("UNKNOWN"))%>%droplevels()
+
+tidy_pred <- m.c.s.g %>% 
+  epred_draws(newdata = newdata ) #change from exoected to posterior to get low or high spread. expected is mean from each posterior sample while posterior is just draw from posterior more like individual response, while expected is population response.
+
+
+#get median value for females 
+tidy_mass_females <- tidy_pred%>%
+  filter(sex=="F")%>%
+  group_by(sex)
+
+#get median value for males 
+tidy_mass_males <- tidy_pred%>%
+  filter(sex=="M")%>%
+  group_by(sex)%>%
+  sample_n(size=nrow(tidy_mass_females))
+
+
+SDI.mass.pred.g.m <- (tidy_mass_males$.epred -tidy_mass_females$.epred)/tidy_mass_females$.epred
+
+SDI.mass.pred.g.m <- sample(SDI.mass.pred.g.m,size= length(SDI.mass.pred.l.m))
+
+mean(SDI.mass.pred.g.m)
+mean(SDI.mass.pred.l.m)
+```
+
+
+
+## SDI generated from Expected Predicted Posterior Draws (Mass) for catagorical model
+
+```{r, echo=F}
+
+SDI.m.plot <- data.frame(x=SDI.mass.pred.g.m, Taxon="greater")
+SDI.m.plot <- rbind(SDI.m.plot, data.frame(x=SDI.mass.pred.l.m, Taxon="lesser"))%>%
+SDI.m.plot%>%
+  group_by(Taxon)%>%
+  summarise(median = median(x),
+            mean= mean(x),
+            se = std.error(x),
+            lower95CI = quantile(x, probs=c(0.025)),
+            upper95CI = quantile(x, probs=c(0.975)))
+
+SDI.plot$cat <-"trachea"
+SDI.m.plot$cat <-"mass"
+
+SDI.plot <- rbind(SDI.plot, SDI.m.plot)
+
+p<-ggplot(SDI.plot, aes(x=x,y=Taxon, colour = cat,
+                  fill = cat))+
+    stat_halfeye(alpha=0.5, point_alpha=0.8, interval_alpha=0.8)+
+    theme_classic(base_size = 14)+
+    scale_fill_manual(values=c("cadetblue", "darkorchid3"))+
+  scale_color_manual(values=c("cadetblue4", "darkorchid4"))+
+    theme(legend.title = element_blank(),
+        legend.position = "none")+
+  scale_x_continuous(limits=c(-0.002, 0.03))+
+    labs(x=expression(paste("SDI"[italic("mass")])), y="")
+p
+
+ggsave(p, filename = paste(getwd(), "/figures/", "SDI_cat_by_color.pdf", sep=""), width=6, height=5)
+cohen.d(SDI.mass.pred.g.m, SDI.mass.pred.l.m)
+
+# d estimate: 0.09718702 (negligible)
+# 95 percent confidence interval:
+#      lower      upper 
+# 0.08943497 0.10493906
+
+SDI_contrasts_plot <- data.frame(SDI.t = SDI.pred.l -SDI.pred.g,
+                                 SDI.m = SDI.mass.pred.l.m - SDI.mass.pred.g.m)
+
+SDI_contrasts_plot <- gather(SDI_contrasts_plot)
+
+p<-ggplot(SDI_contrasts_plot, aes(x=value,y=key, fill=key))+
+    stat_halfeye(fill="grey55")+
+    theme_classic(base_size = 14)+
+    #scale_fill_manual(values=c("dodgerblue2", "darkorchid1"))+
+    theme(legend.title = element_blank(),
+        legend.position = "none")+
+    labs(x="contrasts SDI", y="")
+p
+
+ggsave(p, filename = paste(getwd(), "/figures/", "SDI_contrasts_grey.pdf", sep=""), width=6, height=5)
+
+
+```
+
+Let's try and simulate data using bootstrapping and then loop through to find the intercept Chris describes (find minimum male measurement determine the difference between predicted values at these points.)
+
+```{r}
+iter <- 1000
+intercept_diff_g <- vector()
+intercept_diff_l <- vector()
+
+SDI_g <- vector()
+SDI_l <- vector()
+
+for(i in 1:iter){
+t.df <- dat.g%>%
+  dplyr::select(sex, log_mass, log_mtl)%>%
+  sample_n(., size=nrow(.), replace=T)
+#sim_df(., n=nrow(.), between="sex", empirical = T)%>% #This line simulates data
+
+t.lm  <- lm(log_mtl ~ log_mass + sex , data=t.df) #linear model to extract predictions
+
+t.min.m <- t.df%>%filter(sex=="M")%>%mutate(min.m = min(log_mass))
+
+t.min.m <- data.frame(t.min.m$min.m[1])
+colnames(t.min.m) <- "log_mass"
+t.min.m$sex <- "M"
+
+t.min.f <- data.frame(t.min.m[1])
+colnames(t.min.f) <- "log_mass"
+t.min.f$sex <- "F"
+  
+t.pred.m <- predict(t.lm, newdata= t.min.m)
+
+t.pred.f <- predict(t.lm, newdata= t.min.f)
+
+intercept_diff_g[i] <- t.pred.m-t.pred.f
+SDI_g[i] <- (t.pred.m-t.pred.f)/t.pred.f
+}
+
+for(i in 1:iter){
+t.df <- dat.l%>%
+  dplyr::select(sex, log_mass, log_mtl)%>%
+  sample_n(., size=nrow(.), replace=T)
+#sim_df(., n=nrow(.), between="sex", empirical = T)%>% #This line simulates data
+
+t.lm  <- lm(log_mtl ~ log_mass + sex , data=t.df) #linear model to extract predictions
+
+t.min.m <- t.df%>%filter(sex=="M")%>%mutate(min.m = min(log_mass))
+
+t.min.m <- data.frame(t.min.m$min.m[1])
+colnames(t.min.m) <- "log_mass"
+t.min.m$sex <- "M"
+
+t.min.f <- data.frame(t.min.m[1])
+colnames(t.min.f) <- "log_mass"
+t.min.f$sex <- "F"
+  
+t.pred.m <- predict(t.lm, newdata= t.min.m)
+
+t.pred.f <- predict(t.lm, newdata= t.min.f)
+
+intercept_diff_l[i] <- t.pred.m-t.pred.f
+SDI_l[i] <- (t.pred.m-t.pred.f)/t.pred.f
+
+}
+
+dens.g.int <- density(intercept_diff_g)
+dens.l.int <- density(intercept_diff_l)
+
+plot(dens.g.int, frame=F, col="darkorchid", lwd=2, ylim=c(0,60), xlim=c(-0.01, 0.09), main="", xlab="")
+lines(dens.l.int, col="steelblue", lwd=2)
+
+t.test(intercept_diff_g, intercept_diff_l)
+#very significant differences between these distributions
+
+#get SE for int diffs
+std.error(intercept_diff_g)
+std.error(intercept_diff_l)
+
+#effect size
+cohen.d(intercept_diff_g, intercept_diff_l)
+
+#very large likely much smaller 
+
+dens.g.sdi <- density(SDI_g)
+dens.l.sdi <- density(SDI_l)
+
+plot(dens.g.sdi, frame=F, col="darkorchid", lwd=2, ylim=c(0,130), xlim=c(-0.01, 0.04), main="", xlab="")
+lines(dens.l.sdi, col="steelblue", lwd=2)
+
+t.test(SDI_g, SDI_l)
+#very significant differences between these distributions
+std.error(SDI_g)
+std.error(SDI_l)
+
+# standard error
+
+#effect size
+cohen.d(SDI_g, SDI_l)
+
+#very large likely much smaller 
+
+samp.l.f <- list()
+samp.l.m <- list()
+
+iter <- 100
+for(i in 1:iter){
+  temp.f <- dat.l%>%filter(sex=="F")%>%sample_n(size=nrow(dat.l), replace=T)
+    temp.f$i <- i  # maybe you want to keep track of which iteration produced it?
+    samp.l.f[[i]] <- temp.f # add it to your list
+    
+    temp.m <- dat.l%>%filter(sex=="M")%>%sample_n(size=nrow(dat.l), replace=T)
+    temp.m$i <- i  # maybe you want to keep track of which iteration produced it?
+    samp.l.m[[i]] <- temp.m # add it to your list
+}
+
+samp.l.f<-do.call(rbind, samp.l.f)
+samp.l.m<-do.call(rbind, samp.l.m)
+
+samp.g.f <- list()
+samp.g.m <- list()
+
+iter <- 100
+for(i in 1:iter){
+  temp.f <- dat.g%>%filter(sex=="F")%>%sample_n(size=nrow(dat.g), replace=T)
+    temp.f$i <- i  # maybe you want to keep track of which iteration produced it?
+    samp.g.f[[i]] <- temp.f # add it to your list
+      temp.m <- dat.g%>%filter(sex=="M")%>%sample_n(size=nrow(dat.g), replace=T)
+    temp.m$i <- i  # maybe you want to keep track of which iteration produced it?
+    samp.g.m[[i]] <- temp.m # add it to your list
+}
+
+samp.g.f<-do.call(rbind, samp.g.f)
+samp.g.m<-do.call(rbind, samp.g.m)
+
+samp.both <- rbind(samp.l.f,samp.l.m, samp.g.f, samp.g.m)
+
+
+    ggplot(samp.l.f, aes(x=log_mass, log_mtl, linetype=taxon_name, group=factor(i)))+
+    stat_smooth( geom= "line",size=0.5, color ="grey40", alpha=0.3, method="lm", se=T)+
+       stat_smooth(data=samp.l.m, geom= "line", color="grey80",size=0.5, alpha=0.3, method="lm", se=T)+
+      stat_smooth(data=samp.g.f, geom= "line", color="grey40",size=0.5, alpha=0.3, method="lm", se=T)+
+      stat_smooth(data=samp.g.m, geom= "line", color="grey80",size=0.5, alpha=0.3, method="lm", se=T)+
+      theme_classic(base_size = 14)+
+      labs(x="log10(mass)", y="log10(mean trachea length)")+
+      theme(legend.position = c(0.8,0.2),
+            legend.title = element_blank())
+
+ #Problem here is we are using combined sex lines this is not what we want
+
+```
+
+#same thing but using faux library to make up datasets
+
+```{r}
+iter <- 1000
+intercept_diff_g <- vector()
+intercept_diff_l <- vector()
+
+SDI_g <- vector()
+SDI_l <- vector()
+
+for(i in 1:iter){
+t.df <- dat.g%>%
+  dplyr::select(sex, log_mass, log_mtl)%>%
+  sim_df(., n=nrow(dat.g), between="sex")
+#sim_df(., n=nrow(.), between="sex", empirical = T)%>% #This line simulates data
+
+t.lm  <- lm(log_mtl ~ log_mass + sex , data=t.df) #linear model to extract predictions
+
+t.min.m <- t.df%>%filter(sex=="M")%>%mutate(min.m = min(log_mass))
+
+t.min.m <- data.frame(t.min.m$min.m[1])
+colnames(t.min.m) <- "log_mass"
+t.min.m$sex <- "M"
+
+t.min.f <- data.frame(t.min.m[1])
+colnames(t.min.f) <- "log_mass"
+t.min.f$sex <- "F"
+  
+t.pred.m <- predict(t.lm, newdata= t.min.m)
+
+t.pred.f <- predict(t.lm, newdata= t.min.f)
+
+intercept_diff_g[i] <- t.pred.m-t.pred.f
+SDI_g[i] <- (t.pred.m-t.pred.f)/t.pred.f
+}
+
+for(i in 1:iter){
+t.df <- dat.l%>%
+  dplyr::select(sex, log_mass, log_mtl)%>%
+  sim_df(., n=nrow(dat.l), between="sex")
+#sim_df(., n=nrow(.), between="sex", empirical = T)%>% #This line simulates data
+
+t.lm  <- lm(log_mtl ~ log_mass + sex , data=t.df) #linear model to extract predictions
+
+t.min.m <- t.df%>%filter(sex=="M")%>%mutate(min.m = min(log_mass))
+
+t.min.m <- data.frame(t.min.m$min.m[1])
+colnames(t.min.m) <- "log_mass"
+t.min.m$sex <- "M"
+
+t.min.f <- data.frame(t.min.m[1])
+colnames(t.min.f) <- "log_mass"
+t.min.f$sex <- "F"
+  
+t.pred.m <- predict(t.lm, newdata= t.min.m)
+
+t.pred.f <- predict(t.lm, newdata= t.min.f)
+
+intercept_diff_l[i] <- t.pred.m-t.pred.f
+SDI_l[i] <- (t.pred.m-t.pred.f)/t.pred.f
+
+}
+
+dens.g.int <- density(intercept_diff_g)
+dens.l.int <- density(intercept_diff_l)
+
+plot(dens.g.int, frame=F, col="darkorchid", lwd=2, ylim=c(0,80), xlim=c(-0.01, 0.09), main="", xlab="")
+lines(dens.l.int, col="steelblue", lwd=2)
+
+t.test(intercept_diff_g, intercept_diff_l)
+#very significant differences between these distributions
+
+std.error(intercept_diff_g)
+std.error(intercept_diff_l)
+
+#effect size
+cohen.d(intercept_diff_g, intercept_diff_l)
+
+#very large likely much smaller 
+
+dens.g.sdi <- density(SDI_g)
+dens.l.sdi <- density(SDI_l)
+
+plot(dens.g.sdi, frame=F, col="darkorchid", lwd=2, ylim=c(0,200), xlim=c(-0.01, 0.04), main="", xlab="")
+lines(dens.l.sdi, col="steelblue", lwd=2)
+
+t.test(SDI_g, SDI_l)
+#very significant differences between these distributions
+
+std.error(SDI_g)
+std.error(SDI_l)
+
+#effect size
+cohen.d(SDI_g, SDI_l)
+
+#very large likely much smaller 
+
+samp.l.f <- list()
+samp.l.m <- list()
+
+iter <- 100
+for(i in 1:iter){
+  temp.f <- dat.l%>%filter(sex=="F")%>%dplyr::select(log_mtl, log_mass)%>%sim_df(.)
+    temp.f$i <- i  # maybe you want to keep track of which iteration produced it?
+    samp.l.f[[i]] <- temp.f # add it to your list
+    
+   temp.m <- dat.l%>%filter(sex=="M")%>%dplyr::select(log_mtl, log_mass)%>%sim_df(.)
+    temp.m$i <- i  # maybe you want to keep track of which iteration produced it?
+    samp.l.m[[i]] <- temp.m # add it to your list
+}
+
+samp.l.f<-do.call(rbind, samp.l.f)
+samp.l.m<-do.call(rbind, samp.l.m)
+
+samp.l.f$taxon_name <- factor("Antigone canadensis canadensis")
+samp.l.m$taxon_name <- factor("Antigone canadensis canadensis")
+
+samp.g.f <- list()
+samp.g.m <- list()
+
+iter <- 100
+for(i in 1:iter){
+  temp.f <- dat.g%>%filter(sex=="F")%>%dplyr::select(log_mtl, log_mass)%>%sim_df(.)
+    temp.f$i <- i  # maybe you want to keep track of which iteration produced it?
+    samp.g.f[[i]] <- temp.f # add it to your list
+      temp.m <- dat.g%>%filter(sex=="M")%>%dplyr::select(log_mtl, log_mass)%>%sim_df(.)
+    temp.m$i <- i  # maybe you want to keep track of which iteration produced it?
+    samp.g.m[[i]] <- temp.m # add it to your list
+}
+
+samp.g.f<-do.call(rbind, samp.g.f)
+samp.g.m<-do.call(rbind, samp.g.m)
+
+samp.g.f$taxon_name <- factor("Antigone canadensis tabida")
+samp.g.m$taxon_name <- factor("Antigone canadensis tabida")
+
+samp.both <- rbind(samp.l.f,samp.l.m, samp.g.f, samp.g.m)
+
+
+p <-ggplot(samp.l.f, aes(x=log_mass, log_mtl, linetype=taxon_name, group=factor(i)))+
+    stat_smooth( geom= "line",size=0.5, color ="grey40", alpha=0.3, method="lm", se=T)+
+       stat_smooth(data=samp.l.m, geom= "line", color="grey80",size=0.5, alpha=0.3, method="lm", se=T)+
+      stat_smooth(data=samp.g.f, geom= "line", color="grey40",size=0.5, alpha=0.3, method="lm", se=T)+
+      stat_smooth(data=samp.g.m, geom= "line", color="grey80",size=0.5, alpha=0.3, method="lm", se=T)+
+      theme_classic(base_size = 14)+
+      labs(x="log10(mass)", y="log10(mean trachea length)")+
+      theme(legend.position = c(0.3,0.85),
+            legend.title = element_blank())
+ggsave(p, filename= paste(figures,"lm_replicates_with_faux_simulated_datasets.pdf", sep=""), device="pdf", bg = "transparent", height = 4, width = 6, units = "in")
+
+
+```
+
+#same thing using bayesian models (faux data simulation)
+
+```{r}
+iter <- 100
+
+
+#mods.l <- vector("list", length = iter) #saving each model uses too much memory
+#mods.g <- vector("list", length = iter)
+
+intercept_diff_g_bm <- vector()
+intercept_diff_l_bm <- vector()
+
+
+SDI_g_bm <- vector()
+SDI_l_bm <- vector()
+
+
+brms.g.sim <- list(intercept_diff_g_bm, SDI_g_bm)
+
+brms.l.sim <- list( intercept_diff_l_bm, SDI_l_bm)
+
+
+for(i in 1:iter){
+t.df <- dat.g%>%
+  dplyr::select(sex, log_mass, log_mtl)%>%
+  sim_df(., n=nrow(.), between="sex", empirical = T) #This line simulates data
+t.bm <- brm(
+  formula = bf(log_mtl ~ 1 + log_mass + sex ),
+  data = t.df,
+  family = gaussian(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+       prior(normal(0, 10), "Intercept"),
+       prior(cauchy(0, 2.5), "sigma"),
+       prior(student_t(7, 0, 2.5), class = "b" )),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+#brms.g.sim[[1]][[i]] <- t.bm
+
+newdata <- data.frame(sex = factor(c("M", "F")),
+                      log_mass = c(min(t.df$log_mass), min(t.df$log_mass)))
+
+temp.pred <- predict(t.bm, newdata = newdata)
+
+brms.g.sim[[1]][i] <- temp.pred[1,1]-temp.pred[2,1]
+brms.g.sim[[2]][i] <- (temp.pred[1,1]-temp.pred[2,1])/temp.pred[2,1]
+
+#   plot <-t.df %>%
+#   group_by(sex) %>%
+#   droplevels()%>% #drop unused but present unknown level
+#   data_grid(log_mass = seq_range(log_mass, n = nrow(t.df))) %>%
+#   add_epred_draws(t.bm) #this is huge so need to sample, no longer dataframe so do it separately on next line
+# plot.pred.g[[i]] <- plot[sample(nrow(plot), 1000), c(1,2, 7)]
+
+print(paste("Iteration:", i, "complete.", sep=" "))
+}
+
+for(i in 1:iter){
+t.df <- dat.l%>%
+  dplyr::select(sex, log_mass, log_mtl)%>%
+  #sample_n(., size=nrow(.), replace=T)
+  sim_df(., n=nrow(.), between="sex", empirical = T) #This line simulates data
+t.bm <- brm(
+  formula = bf(log_mtl ~ 1 + log_mass + sex), #using additive model because it is simpler and both lesser and greaters scored equvalent with LOOIC
+  data = t.df,
+  family = gaussian(),
+  cores = 4,
+  chains = 4,
+  thin = 10, 
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+       prior(normal(0, 10), "Intercept"),
+       prior(cauchy(0, 2.5), "sigma"),
+       prior(student_t(7, 0, 2.5), class = "b" )),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+#brms.l.sim[[1]][[i]] <- t.bm
+
+newdata <- data.frame(sex = factor(c("M", "F")),
+                      log_mass = c(min(t.df$log_mass), min(t.df$log_mass)))
+
+temp.pred <- predict(t.bm, newdata = newdata)
+
+
+brms.l.sim[[1]][i] <- temp.pred[1,1]-temp.pred[2,1]
+brms.l.sim[[2]][i] <- (temp.pred[1,1]-temp.pred[2,1])/temp.pred[2,1]
+
+
+
+# plot <-t.df %>%
+#   group_by(sex) %>%
+#   droplevels()%>% #drop unused but present unknown level
+#   data_grid(log_mass = seq_range(log_mass, n = nrow(t.df))) %>%
+#   add_epred_draws(t.bm) #this is huge so need to sample, no longer dataframe so do it separately on next line
+# plot.pred.l[[i]] <- plot[sample(nrow(plot), 1000), c(1,2, 7)]
+
+print(paste("Iteration:", i, "complete.", sep=" "))
+}
+
+
+#Save the model output so you don't have to spend your entire fucking life running them
+saveRDS(brms.g.sim, file=paste(results, "/brms.g.sim.RDS", sep=""))
+readRDS(file=paste(results, "/brms.g.sim.RDS", sep=""))
+
+saveRDS(brms.l.sim, file=paste(results, "/brms.l.sim.RDS", sep=""))
+readRDS(file=paste(results, "/brms.L.sim.RDS", sep=""))
+
+
+#make into dataframe for plotting
+bm.g.ggplot <- as.data.frame(brms.g.sim[[2]])
+colnames(bm.g.ggplot) <- "SDI"
+bm.g.ggplot$subspecies <- factor("Antigone canadensis tabida")
+bm.l.ggplot <- as.data.frame(brms.l.sim[[2]])
+colnames(bm.l.ggplot) <- "SDI"
+bm.l.ggplot$subspecies <- factor("Antigone canadensis canadensis")
+
+bm.ggplot <- rbind(bm.g.ggplot, bm.l.ggplot)
+
+ggplot(bm.ggplot, aes(x=subspecies, y=SDI, fill=subspecies))+
+  #geom_violin()+
+  geom_line() +
+     stat_summary(fun = "median", geom = "point", size = 1)+
+  theme_classic(base_size = 16)+
+  coord_cartesian(ylim=c(0,0.025))+
+  labs(x="")+
+  theme(legend.position = "none")
+
+t.test(brms.l.sim[[1]], brms.g.sim[[1]])
+std.error(brms.g.sim[[1]])
+std.error(brms.l.sim[[1]])
+
+t.test(brms.l.sim[[2]], brms.g.sim[[2]])
+std.error(brms.g.sim[[2]])
+std.error(brms.l.sim[[2]])
+
+#very significant differences between these distributions
+
+#effect size
+cohen.d(brms.l.sim[[1]], brms.g.sim[[1]])
+cohen.d(brms.l.sim[[2]], brms.g.sim[[2]])
+#very large likely much smaller 
+
+```
+
+
+### Bayesian predictions trachea length ~ mass
+```{r}
+    
+plot.l<-dat.l %>%
+  group_by(sex) %>%
+   filter(sex %in% c("M", "F")) %>% 
+   droplevels()%>%
+  data_grid(log_mass = seq_range(log_mass, n = 100)) %>%
+  add_epred_draws(m2.a.l) 
+# %>%
+#   ggplot(aes(x = log_mass, y = log_mtl, color = ordered(sex))) +
+#   stat_lineribbon(aes(y = .epred)) +
+#   geom_point(data = dat.l, alpha=0.3) +
+#   scale_fill_brewer(palette = "Greys") +
+#   scale_color_brewer(palette = "Set2")+
+#    theme_classic(base_size = 14)+
+#   theme(legend.title = element_blank(),
+#         legend.position = "none")
+#  
+ 
+plot.g<-dat.g %>%
+  group_by(sex) %>%
+   filter(sex %in% c("M", "F")) %>% 
+   droplevels()%>%
+  data_grid(log_mass = seq_range(log_mass, n = 100)) %>%
+  add_epred_draws(m2.a.g) 
+
+# %>%
+#   ggplot(aes(x = log_mass, y = log_mtl, color = ordered(sex))) +
+#   stat_lineribbon(aes(y = .epred)) +
+#   geom_point(data = dat.g, alpha=0.3) +
+#   scale_fill_brewer(palette = "Greys") +
+#   scale_color_brewer(palette = "Set2")+
+#    theme_classic(base_size = 14)+
+#   theme(legend.title = element_blank(),
+#         legend.position = "none")
+
+
+
+ggplot(plot.l, aes(x = log_mass, y = log_mtl, color = ordered(sex))) +
+    geom_point(data = dat.l, alpha=0.3) +
+  geom_point(data = dat.g, alpha=0.3) +
+  stat_lineribbon(aes(y = .epred), size=0.5) +
+  stat_lineribbon(data=plot.g,aes( y=.epred), size=0.5)+
+  scale_fill_brewer(palette = "Greys") +
+  scale_color_brewer(palette = "Set2")+
+  labs( x=expression(log["10"](mass~(g))), y=expression(log["10"]("mean trachea length (mm)")))+
+   theme_classic(base_size = 14)+
+  theme(
+    legend.title = element_blank(),
+    legend.position = c(0.9,0.21)
+  )
+
+```
+
+### Bayesian SDI mass ~ mtl
+ 
+```{R}
+l<-dat.l %>%
+  group_by(sex) %>%
+   filter(sex %in% c("M", "F")) %>% 
+   droplevels()%>%
+  data_grid(log_mtl = seq_range(log_mtl, n = 100)) %>%
+  add_epred_draws(mm2.a.l) %>%
+  ggplot(aes(x = log_mtl, y = log_mass, color = ordered(sex))) +
+  stat_lineribbon(aes(y = .epred)) +
+  geom_point(data = dat.l, alpha=0.3) +
+  scale_fill_brewer(palette = "Greys") +
+  scale_color_brewer(palette = "Set2")+
+  labs( x=expression(log["10"]("mean trachea length (mm)")), y=expression(log["10"](mass~(g))))+
+   theme_classic(base_size = 14)+
+  theme(legend.title = element_blank(),
+        legend.position = "none")
+  ggsave(l, filename = paste(getwd(), "/figures/Epredictions_lessers_SDImass.pdf", sep=""), width=5, height = 5)
+ 
+
+
+g<-dat.g %>%
+  group_by(sex) %>%
+   filter(sex %in% c("M", "F")) %>% 
+   droplevels()%>%
+  data_grid(log_mtl = seq_range(log_mtl, n = 100)) %>%
+  add_epred_draws(mm2.a.g) %>%
+  ggplot(aes(x = log_mtl, y = log_mass, color = ordered(sex))) +
+  stat_lineribbon(aes(y = .epred)) +
+  geom_point(data = dat.g, alpha=0.3) +
+  scale_fill_brewer(palette = "Greys") +
+  scale_color_brewer(palette = "Set2")+
+  labs( x=expression(log["10"]("mean trachea length (mm)")), y=expression(log["10"](mass~(g))))+
+   theme_classic(base_size = 14)+
+  theme(legend.title = element_blank(),
+        legend.position = "none")
+
+ggsave(g, filename = paste(getwd(), "/figures/Epredictions_greaters_SDImass.pdf", sep=""), width=5, height = 5)
+  
+```
+
+## Segment by trachea length models
+
+Let's allow mean tracheae length mass, sex  to predict segment density
+
+### Lessers only intercept only model
+```{r}
+
+
+seg.l.int.only <- brm(
+  formula = bf(segment_count2 ~ 1),
+  data = dat.l,
+  family = poisson(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg.l.int.only, file=paste(getwd(), "/models/", "crane_trachea_segments_lesser_int_only_fam_poisson.RData", sep="")) # save model
+
+#load("crane_trachea_segments_lesser_int_only_fam_gaussian.RData") # If loading from pre-saved file and not re-running
+
+seg.l.int.only
+
+# pp check
+pp_check(seg.l.int.only, ndraws = 100) 
+pp_check(seg.l.int.only, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg.l.int.only, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg.l.int.only)
+
+# pairwise plots
+pairs(seg.l.int.only)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(seg.l.int.only,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg.l.int.only), points = F) 
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(seg.l.int.only)[,-2])
+
+
+```
+
+### Lessers only additive 1-term (sex)
+```{r}
+
+#use this to get idea of priors then set your own!!
+# priors <-get_prior(log_mtl ~ 1 + log10(segment_count2)  + sex,
+#                    data = dat.l, family = gaussian())
+
+seg1.l.a.s <- brm(
+  formula = bf(segment_count2 ~ 1 + sex),
+  data = dat.l,
+  family = poisson(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg1.l.a.s, file=paste(getwd(), "/models/", "crane_trachea_segments_lesser_additive_sex_fam_poisson.RData", sep="")) # save model
+
+#load("crane_trachea_segments_lesser_additive_sex_fam_gaussian.RData") # If loading from pre-saved file and not re-running
+
+seg1.l.a.s
+
+# pp check
+pp_check(seg1.l.a.s, ndraws = 100) 
+pp_check(seg1.l.a.s, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg1.l.a.s, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg1.l.a.s)
+
+# pairwise plots
+pairs(seg1.l.a.s)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(seg1.l.a.s,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg1.l.a.s), points = F) 
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(seg1.l.a.s)[,-2])
+
+
+```
+
+### Lessers only additive 1-term (bursa)
+```{r}
+
+seg1.l.a.b <- brm(
+  formula = bf(segment_count2 ~ 1 + bursa),
+  data = dat.l,
+  family = poisson(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg1.l.a.b, file=paste(getwd(), "/models/", "crane_trachea_segments_lesser_additive_bursa_fam_poisson.RData", sep="")) # save model
+
+#load("crane_trachea_segments_lesser_additive_sex_fam_poisson.RData") # If loading from pre-saved file and not re-running
+
+seg1.l.a.b
+
+
+# pp check
+pp_check(seg1.l.a.b, ndraws = 100) 
+pp_check(seg1.l.a.b, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg1.l.a.b, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg1.l.a.b)
+
+# pairwise plots
+pairs(seg1.l.a.b)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(seg1.l.a.b,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg1.l.a.b), points = F) 
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(ms1.a.b)[,-2])
+
+
+```
+
+### Lessers only additive 1-term (mtl)
+```{r}
+
+seg1.l.a.t <- brm(
+  formula = bf(segment_count2 ~ 1 + log_mtl),
+  data = dat.l,
+  family = poisson(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+      prior(normal(0,5), class="b")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg1.l.a.t, file=paste(getwd(), "/models/", "crane_trachea_segments_lesser_additive_mtl_fam_poisson.RData", sep="")) # save model
+
+#load("crane_trachea_segments_lesser_additive_sex_fam_poisson.RData") # If loading from pre-saved file and not re-running
+
+seg1.l.a.t
+
+# pp check
+pp_check(seg1.l.a.t, ndraws = 100) 
+pp_check(seg1.l.a.t, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg1.l.a.t, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg1.l.a.t)
+
+# pairwise plots
+pairs(seg1.l.a.t)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(seg1.l.a.t,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg1.l.a.t), points = F) 
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(ms1.a.t)[,-2])
+
+
+```
+
+### Lessers only additive 2-term (sex + bursa)
+```{r}
+
+seg2.l.a.sb <- brm(
+  formula = bf(segment_count2 ~ 1 + sex + bursa),
+  data = dat.l,
+  family = poisson(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg2.l.a.sb, file=paste(getwd(), "/models/", "crane_trachea_segments_lesser_additive_bursa-sex_fam_poisson.RData", sep="")) # save model
+
+#load("crane_trachea_segments_lesser_additive_bursa-sex_fam_poisson.RData") # If loading from pre-saved file and not re-running
+
+seg2.l.a.sb
+
+# pp check
+pp_check(seg2.l.a.sb, ndraws = 100) 
+pp_check(seg2.l.a.sb, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg2.l.a.sb, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg2.l.a.sb)
+
+# pairwise plots
+pairs(seg2.l.a.sb)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(seg2.l.a.sb,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg2.l.a.sb), points = F) 
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(seg2.l.a.sb)[,-2])
+
+
+```
+
+### Lessers only additive 2-term (sex + mtl)
+```{r}
+
+seg2.l.a.st <- brm(
+  formula = bf(segment_count2 ~ 1 + sex + log_mtl),
+  data = dat.l,
+  family = poisson(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+      prior(normal(0, 10), coef = "log_mtl")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg2.l.a.st, file=paste(getwd(), "/models/", "crane_trachea_segments_lesser_additive_sex-mtl_fam_poisson.RData", sep="")) # save model
+
+#load("crane_trachea_segments_lesser_additive_bursa-sex_fam_poisson.RData") # If loading from pre-saved file and not re-running
+
+seg2.l.a.st
+
+# pp check
+pp_check(seg2.l.a.st, ndraws = 100) 
+pp_check(seg2.l.a.st, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg2.l.a.st, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg2.l.a.st)
+
+# pairwise plots
+pairs(seg2.l.a.st)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(seg2.l.a.st,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg2.l.a.st), points = F) 
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(seg2.l.a.st)[,-2])
+
+
+```
+
+### Lessers only additive 2-term (bursa + mtl)
+```{r}
+
+seg2.l.a.bt <- brm(
+  formula = bf(segment_count2 ~ 1 + bursa + log_mtl),
+  data = dat.l,
+  family = poisson(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+      prior(normal(0, 10), coef = "log_mtl")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg2.l.a.bt, file=paste(getwd(), "/models/", "crane_trachea_segments_lesser_additive_bursa-mtl_fam_poisson.RData", sep="")) # save model
+
+#load("crane_trachea_segments_lesser_additive_bursa-sex_fam_poisson.RData") # If loading from pre-saved file and not re-running
+
+# pp check
+pp_check(seg2.l.a.bt, ndraws = 100) 
+pp_check(seg2.l.a.bt, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg2.l.a.bt, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg2.l.a.bt)
+
+# pairwise plots
+pairs(seg2.l.a.bt)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(seg2.l.a.bt,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg2.l.a.bt), points = F) 
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(seg2.l.a.bt)[,-2])
+
+
+```
+
+### Lessers only three term additive (mtl + sex + bursa)
+```{r}
+
+seg3.l.a.tbs <- brm(
+  formula = bf(segment_count2 ~ 1 + log_mtl + bursa + sex),
+  data = dat.l,
+  family = poisson(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+     prior(normal(0, 10), coef="log_mtl")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg3.l.a.tbs, file=paste(getwd(), "/models/", "crane_trachea_segments_lesser_additive_full_fam_poisson.RData", sep="")) # save model
+
+#load("crane_trachea_lesser_additive_full_fam_gaussian.RData") # If loading from pre-saved file and not re-running
+
+# pp check
+pp_check(seg3.l.a.tbs, ndraws = 100) 
+pp_check(seg3.l.a.tbs, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg3.l.a.tbs, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg3.l.a.tbs)
+
+# pairwise plots
+pairs(seg3.l.a.tbs)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+
+mcmc_plot(seg3.l.a.tbs,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg3.l.a.tbs), points = F) 
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(seg3.l.a.tbs)[,-2])
+
+
+```
+
+
+
+### Lessers only two term interaction (mtl + sex)
+```{r}
+
+seg2.l.i.s.t <- brm(
+  formula = bf(segment_count2 ~ 1 + (sex + log_mtl)^2),
+  data = dat.l,
+  family = poisson(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+     prior(normal(0, 10), coef="log_mtl")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg2.l.i.s.t, file=paste(getwd(), "/models/", "crane_trachea_segments_lesser_interaction_sex-seg_dens_fam_poisson.RData", sep="")) # save model
+
+#load("crane_trachea_lesser_additive_full_fam_gaussian.RData") # If loading from pre-saved file and not re-running
+
+# pp check
+pp_check(seg2.l.i.s.t, ndraws = 1000) 
+pp_check(seg2.l.i.s.t, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg2.l.i.s.t, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg2.l.i.s.t)
+
+# pairwise plots
+pairs(seg2.l.i.s.t)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(seg2.l.i.s.t,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg2.l.i.s.t), points = F) 
+
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(seg2.l.i.s.t)[,-2])
+
+
+```
+
+### Model selection
+```{r}
+
+# with sex only catagorical
+LOO(seg.l.int.only, seg1.l.a.s, seg1.l.a.t, seg2.l.a.st, seg2.l.i.s.t, reloo=FALSE) 
+
+ #Bayes R2
+bayes_R2(seg.l.int.only) # 0.0000000000 nothing
+bayes_R2(seg1.l.a.s) #0.14
+bayes_R2(seg1.l.a.t) #0.014
+bayes_R2(seg2.l.a.st) #0.14
+bayes_R2(seg2.l.i.s.t) #0.19
+
+#Since we are interested in segments by trachea length here is another model comparison set
+
+LOO(seg.l.int.only, seg1.l.a.t, seg2.l.a.st, seg2.l.i.s.t, reloo=FALSE) 
+
+ #Bayes R2
+bayes_R2(seg.l.int.only) # 0.0000000000 nothing
+bayes_R2(seg1.l.a.t) #0.014
+bayes_R2(seg2.l.a.st) #0.14
+
+```
+
+### Predictions graph
+Doing this for model with most explanatory power and since we are interested in sex differences and how segment number changes with trachea length
+```{r}
+g<-dat.l %>%
+  group_by(sex) %>%
+   filter(sex %in% c("M", "F")) %>% 
+   droplevels()%>%
+  data_grid(log_mtl = seq_range(log_mtl, n = 100)) %>%
+  add_epred_draws(seg2.l.i.s.t) %>%
+  ggplot(aes(x = log_mtl, y = segment_count2, color = ordered(sex))) +
+  stat_lineribbon(aes(y = .epred), alpha=0.6) +
+  geom_point(data = dat.l, alpha=0.3) +
+  scale_fill_brewer(palette = "Greys") +
+  scale_color_brewer(palette = "Set2")+
+  labs( x=expression(log["10"]("mean trachea length (mm)")), y="segment count")+
+   theme_classic(base_size = 14)+
+  theme(legend.title = element_blank(),
+        legend.position = "none")
+g
+ggsave(g, filename = paste(getwd(), "/figures/Epredictions_greaters_seg_mtl.pdf", sep=""), width=5, height = 5)
+  
+```
+
+### Greaters only intercept only model
+```{r}
+
+
+seg.g.int.only <- brm(
+  formula = bf(segment_count2 ~ 1),
+  data = dat.g%>%filter(segment_count2<350),
+  family = gaussian(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg.g.int.only, file=paste(getwd(), "/models/", "crane_trachea_segments_greater_int_only_fam_gaussian.RData", sep="")) # save model
+
+#load("crane_trachea_segments_lesser_int_only_fam_gaussian.RData") # If loading from pre-saved file and not re-running
+
+seg.g.int.only
+
+# pp check
+pp_check(seg.g.int.only, ndraws = 100) 
+pp_check(seg.g.int.only, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg.g.int.only, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg.g.int.only)
+
+# pairwise plots
+pairs(seg.g.int.only)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(seg.g.int.only,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg.g.int.only), points = F) 
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(seg.g.int.only)[,-2])
+
+
+```
+
+### greaters only additive 1-term (sex)
+```{r}
+
+#use this to get idea of priors then set your own!!
+# priors <-get_prior(log_mtl ~ 1 + log10(segment_count2)  + sex,
+#                    data = dat.g%>%filter(segment_count2 <350), family = gaussian())
+
+seg1.g.a.s <- brm(
+  formula = bf(segment_count2 ~ 1 + sex),
+  data = dat.g%>%filter(segment_count2 <350),
+  family = gaussian(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg1.g.a.s, file=paste(getwd(), "/models/", "crane_trachea_segments_greater_additive_sex_fam_gaussian.RData", sep="")) # save model
+
+#load("crane_trachea_segments_greater_additive_sex_fam_gaussian.RData") # If loading from pre-saved file and not re-running
+
+seg1.g.a.s
+
+# pp check
+pp_check(seg1.g.a.s, ndraws = 100) 
+pp_check(seg1.g.a.s, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg1.g.a.s, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg1.g.a.s)
+
+# pairwise plots
+pairs(seg1.g.a.s)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(seg1.g.a.s,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg1.g.a.s), points = F) 
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(seg1.g.a.s)[,-2])
+
+
+```
+
+### greaters only additive 1-term (bursa)
+```{r}
+
+seg1.g.a.b <- brm(
+  formula = bf(segment_count2 ~ 1 + bursa),
+  data = dat.g%>%filter(segment_count2 <350),
+  family = gaussian(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg1.g.a.b, file=paste(getwd(), "/models/", "crane_trachea_segments_greater_additive_bursa_fam_gaussian.RData", sep="")) # save model
+
+#load("crane_trachea_segments_greater_additive_sex_fam_poisson.RData") # If loading from pre-saved file and not re-running
+
+seg1.g.a.b
+
+
+# pp check
+pp_check(seg1.g.a.b, ndraws = 100) 
+pp_check(seg1.g.a.b, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg1.g.a.b, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg1.g.a.b)
+
+# pairwise plots
+pairs(seg1.g.a.b)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(seg1.g.a.b,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg1.g.a.b), points = F) 
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(ms1.a.b)[,-2])
+
+
+```
+
+### greaters only additive 1-term (mtl)
+```{r}
+
+seg1.g.a.t <- brm(
+  formula = bf(segment_count2 ~ 1 + log_mtl),
+  data = dat.g%>%filter(segment_count2 <350),
+  family = gaussian(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+      prior(cauchy(0,3), coef= "log_mtl")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg1.g.a.t, file=paste(getwd(), "/models/", "crane_trachea_segments_greater_additive_mtl_fam_gaussian.RData", sep="")) # save model
+
+#load("crane_trachea_segments_greater_additive_sex_fam_poisson.RData") # If loading from pre-saved file and not re-running
+
+seg1.g.a.t
+
+# pp check
+pp_check(seg1.g.a.t, ndraws = 100) 
+pp_check(seg1.g.a.t, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg1.g.a.t, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg1.g.a.t)
+
+# pairwise plots
+pairs(seg1.g.a.t)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(seg1.g.a.t,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg1.g.a.t), points = F) 
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(ms1.a.t)[,-2])
+
+
+```
+
+### greaters only additive 2-term (sex + bursa)
+```{r}
+
+seg2.g.a.sb <- brm(
+  formula = bf(segment_count2 ~ 1 + sex + bursa),
+  data = dat.g%>%filter(segment_count2 <350),
+  family = gaussian(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg2.g.a.sb, file=paste(getwd(), "/models/", "crane_trachea_segments_greater_additive_bursa-sex_fam_gaussian.RData", sep="")) # save model
+
+#load("crane_trachea_segments_greater_additive_bursa-sex_fam_poisson.RData") # If loading from pre-saved file and not re-running
+
+seg2.g.a.sb
+
+# pp check
+pp_check(seg2.g.a.sb, ndraws = 100) 
+pp_check(seg2.g.a.sb, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg2.g.a.sb, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg2.g.a.sb)
+
+# pairwise plots
+pairs(seg2.g.a.sb)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(seg2.g.a.sb,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg2.g.a.sb), points = F) 
+
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(seg2.g.a.sb)[,-2])
+
+
+```
+
+### greaters only additive 2-term (sex + mtl)
+```{r}
+
+seg2.g.a.st <- brm(
+  formula = bf(segment_count2 ~ 1 + sex + log_mtl),
+  data = dat.g%>%filter(segment_count2 <350),
+  family = gaussian(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+      prior(normal(0, 10), coef = "log_mtl")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg2.g.a.st, file=paste(getwd(), "/models/", "crane_trachea_segments_greater_additive_sex-mtl_fam_gaussian.RData", sep="")) # save model
+
+#load("crane_trachea_segments_greater_additive_bursa-sex_fam_poisson.RData") # If loading from pre-saved file and not re-running
+
+seg2.g.a.st
+
+# pp check
+pp_check(seg2.g.a.st, ndraws = 100) 
+pp_check(seg2.g.a.st, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg2.g.a.st, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg2.g.a.st)
+
+# pairwise plots
+pairs(seg2.g.a.st)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(seg2.g.a.st,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg2.g.a.st), points = F) 
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(seg2.g.a.st)[,-2])
+
+
+```
+
+### greaters only additive 2-term (bursa + mtl)
+```{r}
+
+seg2.g.a.bt <- brm(
+  formula = bf(segment_count2 ~ 1 + bursa + log_mtl),
+  data = dat.g%>%filter(segment_count2 <350),
+  family = gaussian(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+      prior(normal(0, 10), coef = "log_mtl")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg2.g.a.bt, file=paste(getwd(), "/models/", "crane_trachea_segments_greater_additive_bursa-mtl_fam_gaussian.RData", sep="")) # save model
+
+#load("crane_trachea_segments_greater_additive_bursa-sex_fam_poisson.RData") # If loading from pre-saved file and not re-running
+
+# pp check
+pp_check(seg2.g.a.bt, ndraws = 100) 
+pp_check(seg2.g.a.bt, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg2.g.a.bt, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg2.g.a.bt)
+
+# pairwise plots
+pairs(seg2.g.a.bt)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(seg2.g.a.bt,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg2.g.a.bt), points = F) 
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(seg2.g.a.bt)[,-2])
+
+
+```
+
+### greaters only three term additive (mtl + sex + bursa)
+```{r}
+
+seg3.g.a.tbs <- brm(
+  formula = bf(segment_count2 ~ 1 + log_mtl + bursa + sex),
+  data = dat.g%>%filter(segment_count2 <350),
+  family = gaussian(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+     prior(normal(0, 10), coef="log_mtl")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg3.g.a.tbs, file=paste(getwd(), "/models/", "crane_trachea_segments_greater_additive_full_fam_gaussian.RData", sep="")) # save model
+
+#load("crane_trachea_greater_additive_full_fam_gaussian.RData") # If loading from pre-saved file and not re-running
+
+# pp check
+pp_check(seg3.g.a.tbs, ndraws = 100) 
+pp_check(seg3.g.a.tbs, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg3.g.a.tbs, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg3.g.a.tbs)
+
+# pairwise plots
+pairs(seg3.g.a.tbs)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(seg3.g.a.tbs,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg3.g.a.tbs), points = F) 
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(seg3.g.a.tbs)[,-2])
+
+
+```
+
+### greaters only two term interaction (bursa + sex)
+```{r}
+
+seg2.g.i.sb <- brm(
+  formula = bf(segment_count2 ~ 1 + (sex + bursa)^2),
+  data = dat.g%>%filter(segment_count2 <350),
+  family = gaussian(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg2.g.i.sb, file=paste(getwd(), "/models/", "crane_trachea_segments_greater_interaction_sex-bursa_fam_gaussian.RData", sep="")) # save model
+
+#load("crane_trachea_greater_additive_full_fam_gaussian.RData") # If loading from pre-saved file and not re-running
+
+# pp check
+pp_check(seg2.g.i.sb, ndraws = 100) 
+pp_check(seg2.g.i.sb, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg2.g.i.sb, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg2.g.i.sb)
+
+# pairwise plots
+pairs(seg2.g.i.sb)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(seg2.g.i.sb,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg2.g.i.sb), points = F) 
+
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(seg2.g.i.sb)[,-2])
+
+
+```
+
+### greaters only two term interaction (mtl + sex)
+```{r}
+
+seg2.g.i.s.t <- brm(
+  formula = bf(segment_count2 ~ 1 + (sex + log_mtl)^2),
+  data = dat.g%>%filter(segment_count2 <350),
+  family = gaussian(),
+  cores = 4,
+  chains = 4,
+  thin = 10, #chop out transitions?
+  warmup = 10000, #half of iterations
+  iter = 20000,
+  prior = c(
+      prior(student_t(3, 2.8, 2.5), "Intercept"),
+     prior(normal(0, 10), coef="log_mtl")),
+  #prior = priors,
+  save_pars = save_pars(all = TRUE), #need this for loo comparison
+  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+  set.seed(2020)
+)
+
+save(seg2.g.i.s.t, file=paste(getwd(), "/models/", "crane_trachea_segments_greater_interaction_sex-mtl_fam_gaussian.RData", sep="")) # save model
+
+#load("crane_trachea_greater_additive_full_fam_gaussian.RData") # If loading from pre-saved file and not re-running
+
+# pp check
+pp_check(seg2.g.i.s.t) 
+pp_check(seg2.g.i.s.t, type = "stat", stat = 'median', ndraws = 2000)
+pp_check(seg2.g.i.s.t, type = "stat", stat = 'mean', ndraws = 2000)
+
+# trace and density plots
+plot(seg2.g.i.s.t)
+
+# pairwise plots
+pairs(seg2.g.i.s.t)
+
+
+# Quick plot of estimates and 95% CIs (default is 95% CI:
+#mcmc_plot(m1.a.l)
+mcmc_plot(seg2.g.i.s.t,
+           prob_outer = 0.95)
+
+plot(conditional_effects(seg2.g.i.s.t), points = F) 
+
+
+
+# Changes the fixed effects (i.e. random variable) to odd's ratio 
+exp(fixef(seg2.g.i.s.t)[,-2])
+
+
+```
+
+### Model selection
+```{r}
+
+# with sex only catagorical
+LOO(seg.g.int.only, seg1.g.a.s, seg1.g.a.t, seg2.g.a.st, seg2.g.i.s.t, reloo=FALSE) 
+
+ #Bayes R2
+bayes_R2(seg.g.int.only) # 0.0000000000 nothing
+bayes_R2(seg1.g.a.s) #0.07
+bayes_R2(seg1.g.a.t) #0.19
+bayes_R2(seg2.g.a.st) #0.07
+bayes_R2(seg2.g.i.s.t) #0.14
+
+#Since we are interested in segments by trachea length here is another model comparison set
+
+LOO(seg.g.int.only, seg1.g.a.t, seg2.g.a.st, seg2.g.i.s.t, reloo=FALSE) 
+
+ #Bayes R2
+bayes_R2(seg.g.int.only) # 0.0000000000 nothing
+bayes_R2(seg1.g.a.t) #0.014
+bayes_R2(seg2.g.a.st) #0.14
+
+```
+
+### Predictions graph
+Doing this for model with most explanatory power and since we are interested in sex differences and how segment number changes with trachea length
+```{r}
+g<-dat.g%>%filter(segment_count2 <350) %>%
+  group_by(sex) %>%
+   filter(sex %in% c("M", "F")) %>% 
+   droplevels()%>%
+  data_grid(log_mtl = seq_range(log_mtl, n = 100)) %>%
+  add_epred_draws(seg2.g.i.s.t) %>%
+  ggplot(aes(x = log_mtl, y = segment_count2, color = ordered(sex))) +
+  stat_lineribbon(aes(y = .epred)) +
+  geom_point(data = dat.g%>%filter(segment_count2 <350), alpha=0.3) +
+  scale_fill_brewer(palette = "Greys") +
+  scale_color_brewer(palette = "Set2")+
+  labs( x=expression(log["10"]("mean trachea length (mm)")), y="segment count")+
+   theme_classic(base_size = 14)+
+  theme(legend.title = element_blank(),
+        legend.position = "none")
+g
+ggsave(g, filename = paste(getwd(), "/figures/Epredictions_greaters_seg_mtl.pdf", sep=""), width=5, height = 5)
+  
+```
+

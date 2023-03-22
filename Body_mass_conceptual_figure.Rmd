@@ -1,0 +1,498 @@
+---
+title: "Crane_trachea (Body mass conceptual figure)"
+author: "Chauncey Gadek and Trinity Casaus" 
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: true
+    number_sections: true
+    toc_depth: 5
+    code_folding: hide
+    #df_print: paged
+    #df_print: kable
+    #toc_float: true
+      #collapsed: false
+      #smooth_scroll: TRUE
+    theme: cosmo #spacelab #yeti #united #cosmo
+    highlight: tango
+  pdf_document:
+    df_print: kable
+fontsize: 12pt
+geometry: margin=0.25in
+always_allow_html: yes
+bibliography: references.bib  
+---
+
+```{=html}
+<style>
+/* HTML FORMATTING */
+h1, .h1, h2, .h2, h3, .h3, h4, .h4, h5, .h5 {
+  margin-top: 25px; /* space before each header */
+  font-weight: bold; /* bold headers */
+}
+</style>
+```
+```{R, echo=FALSE}
+# I set some GLOBAL R chunk options here.
+#   (to hide this message add "echo=FALSE" to the code chunk options)
+rm(list =ls (all = TRUE)) #This removes objects from global environ
+knitr::opts_chunk$set(echo=T, comment = NA, message = FALSE, warning = FALSE, width = 100)
+knitr::opts_chunk$set(fig.align = "center", fig.height = 4, fig.width = 6)
+#setwd("C:/Users/Trinity's/Dropbox/Crane_trachea")
+#setwd("~/Dropbox/Crane_trachea") #need to change to local directory
+```
+
+# Load Packages
+
+```{R}
+library(reshape)
+library(reshape2)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(GGally)
+library(gridExtra)
+library(gplots)
+library(ggplot2)
+library(ggExtra)
+library(cowplot)
+library(viridis)
+```
+
+This script is to create a figure illustrating the variation of SSD in birds and a larger group of animals. I have downloaded data from @herberstein2022animaltraits who recently published an animal traits database including male and female mass for a handful of species. @Amniote2015 is an older dataset with ~ 5000 birds that have mean values of mass by sex. Their [metadata](https://www.esapubs.org/archive/ecol/E096/269/metadata.php) does not describe how they obtained the mass metrics, but the [abstract](https://esajournals.onlinelibrary.wiley.com/doi/abs/10.1890/15-0846R.1) suggest that they are median values. @Amniote2015 is a large dataset with containing reptiles birds and mammals. @lislevand2007avian is an older dataset with ~ 5000 birds that have mean values of mass by sex. Their [metadata](https://www.esapubs.org/archive/ecol/E096/269/metadata.php), does not describe how they obtained the mass metrics, but gives sample sizes at points so probably either mean or median. 
+
+There is considerable redundancy in these datasets. After loading them and wrangling them into the same units and format, I will combine them and take the mean of all values by taxon. This will ensure that different measurements for the same species are further combined.
+
+# Read in all kinds of data
+```{r}
+Amniote_2015 <- read.csv("data/Amniote_Database_Aug_2015.csv")
+animal_traits <- read.csv("data/animaltraits.csv")
+avian_Lislevand_2007 <- read.delim("data/avian_body_size.txt", sep="\t")
+
+```
+
+# Wrangle the diverse data
+```{r}
+Amniote_2015_ALL <- Amniote_2015%>%
+  filter(male_body_mass_g >= -500,
+         female_body_mass_g >= -500)%>%
+  na.omit()%>%
+  mutate(taxon = factor(paste(genus, species, sep=" ")),
+         male = male_body_mass_g,
+         female = female_body_mass_g,
+         sex_diff_male_female = male - female,
+         SDI = (male-female)/female)%>%
+  dplyr::select(taxon, male, female, sex_diff_male_female, SDI)
+Amniote_2015_ALL$taxon <- reorder(Amniote_2015_ALL$taxon, Amniote_2015_ALL$sex_diff_male_female)
+
+
+animal_traits_all <- animal_traits%>%
+  dplyr::select(genus, species, sex, body.mass)%>%
+  mutate(body.mass = body.mass *1000, #change from kg to g
+         taxon = factor(species))%>%
+  filter(!is.na(body.mass) & !is.na(sex) & !sex == "")%>%
+  group_by(taxon, sex)%>%
+  summarise(body.mass = mean(body.mass, na.rm = T))%>%
+  pivot_wider(.,id_cols =c(taxon), values_from = body.mass, names_from = sex)%>%
+  dplyr::select(!both)%>%
+  na.omit()%>%
+  mutate(sex_diff_male_female = male - female,
+         SDI = (male-female)/female)%>%
+  dplyr::select(taxon, male, female, sex_diff_male_female, SDI)
+
+Amniote_2015_birds <- Amniote_2015%>%
+  filter(class == "Aves",
+         male_body_mass_g >= -500,
+         female_body_mass_g >= -500)%>%
+  na.omit()%>%
+  mutate(male = male_body_mass_g,
+         female = female_body_mass_g,
+          taxon = factor(paste(genus, species, sep=" ")),
+         sex_diff_male_female = male - female,
+         SDI = (male-female)/female)%>%
+  dplyr::select(taxon, male, female, sex_diff_male_female, SDI)
+
+
+animal_traits_birds <- animal_traits%>%
+  filter(class=="Aves")%>%
+  dplyr::select(genus, species, sex, body.mass)%>%
+  mutate(body.mass = body.mass *1000, #change from kg to g
+         taxon = factor(species))%>%
+  filter(!is.na(body.mass) & !is.na(sex) & !sex == "")%>%
+  group_by(taxon, sex)%>%
+  summarise(body.mass = mean(body.mass, na.rm = T))%>%
+  pivot_wider(.,id_cols =c(taxon), values_from = body.mass, names_from = sex)%>%
+  na.omit()%>%
+  mutate(sex_diff_male_female = male - female,
+         SDI = (male-female)/female)%>%
+  dplyr::select(taxon, male, female, sex_diff_male_female, SDI)
+
+Livesand_birds <- avian_Lislevand_2007%>%
+  dplyr::select(Species_name, M_mass, F_mass)%>%
+  mutate(taxon = factor(Species_name))%>%
+  filter(M_mass >= -500,
+         F_mass >= -500)%>%
+  na.omit()%>%
+  group_by(taxon)%>%
+  summarise(male = mean(M_mass, na.rm = T),
+            female = mean(F_mass, na.rm = T))%>%
+  mutate(sex_diff_male_female = male - female,
+         SDI = (male-female)/female)%>%
+  dplyr::select(taxon, male, female, sex_diff_male_female, SDI)
+
+#combine datasets
+all_animals <- rbind(Amniote_2015_ALL, animal_traits_all)
+all_birds <- rbind(Amniote_2015_birds, animal_traits_birds, Livesand_birds)
+
+#remove duplicates
+all_animals <- all_animals%>%
+  distinct(., taxon, .keep_all = TRUE)%>%
+  droplevels()
+all_birds <- all_birds%>%
+  distinct(., taxon, .keep_all = TRUE)%>%
+  droplevels()
+
+#add crane no crane column to birds
+all_birds <- all_birds%>%
+  mutate(crane_y_n = factor(if_else(taxon %in% c("Grus canadensis canadensis", "Grus canadensis tabida"), 1,0)))
+
+#Reorder by sex diff for plotting
+all_animals$taxon <- reorder(all_animals$taxon, all_animals$sex_diff_male_female)
+all_birds$taxon <- reorder(all_birds$taxon, all_birds$sex_diff_male_female)
+```
+
+# Plot
+## All Amniotes
+```{r}
+all_animals %>%
+  mutate(sex.diff.log = log10(male)-log10(female),
+         sex.diff = log10(male)-log10(female))%>%
+    arrange(taxon, sex_diff_male_female) %>%               # sort your dataframe
+  mutate(taxon = factor(taxon, unique(taxon)))%>% # reset your factor-column based on that order
+ggplot(., aes(x= taxon, y=log10(sex_diff_male_female), color=log10(sex_diff_male_female), fill=log10(sex_diff_male_female)))+
+  geom_col(width=0.1)+
+  geom_col(
+     data = all_birds %>%
+  #filter(sex_diff_male_female > -0.7) %>%
+  #mutate(sex.diff.log = log10(male)-log10(female))%>%
+  filter(crane_y_n == 1)%>%
+    arrange(taxon, sex_diff_male_female),
+  fill = "black",
+  color = "black",
+  width = 0.01
+  ) +
+  scale_colour_viridis_c()+
+   # scale_fill_gradient2(low = "#d1495b", mid = "#fde09f", high = "#00798c", midpoint = 0, breaks = c(-0.0001,0,0.001))+
+   # scale_colour_gradient2(low = "#d1495b", mid = "#fde09f", high = "#00798c", midpoint = 0, breaks = c(-0.0001,0,0.001))+
+  theme(
+    legend.position = "none",
+    legend.title = element_blank(),
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+
+```
+
+```{r}
+Amniote_2015_ALL %>%
+  filter(SDI < 6) %>%
+  mutate(sex.diff.log = log10(male) - log10(female)) %>%
+  arrange(SDI) %>%               # sort your dataframe
+  mutate(taxon = factor(taxon, unique(taxon))) %>% # reset your factor-column based on that order
+  ggplot(.
+         ,
+         aes(
+           x = log10(male),
+           y = SDI,
+           fill = SDI,
+           color = SDI
+         )) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm",
+              color = "grey57",
+              size = 1) +
+  geom_point(
+    data = all_birds %>%
+      #filter(sex_diff_male_female > -0.7) %>%
+      mutate(sex.diff.log = log10(male) - log10(female)) %>%
+      filter(crane_y_n == 1) %>%
+      arrange(taxon, SDI),
+    aes(),
+    fill = "darkorchid",
+    color = "darkorchid",
+    alpha = 0.7,
+    size = 3,
+    shape=21
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_fill_gradient2(
+    low = "#d1492d",
+    mid = "#fde09f",
+    high = "#00798c"
+  ) +
+  scale_colour_gradient2(
+    low = "#d1492d",
+    mid = "#FFE6BE",
+    high = "#00798c",
+    midpoint = 0.1,
+    breaks = c(-0.25, 0, 0.25, 0.5, 1, 1.5, 2)
+  ) +
+  theme(legend.title = element_blank(),
+        legend.position = c(2, 9)) +
+  theme_cowplot()
+```
+
+```{r}
+Amniote_2015_ALL %>%
+  filter(SDI < 6) %>%
+  mutate(sex.diff.log = log10(male) - log10(female)) %>%
+  arrange(SDI) %>%               # sort your dataframe
+  mutate(taxon = factor(taxon, unique(taxon))) %>% # reset your factor-column based on that order
+  ggplot(.
+         ,
+         aes(
+           x = log10(male),
+           y = SDI,
+           fill = SDI,
+           color = SDI
+         )) +
+  geom_col(alpha = 0.5, binwidth=1) +
+  geom_point(
+    data = all_birds %>%
+      #filter(sex_diff_male_female > -0.7) %>%
+      mutate(sex.diff.log = log10(male) - log10(female)) %>%
+      filter(crane_y_n == 1) %>%
+      arrange(taxon, SDI),
+    aes(),
+    fill = "darkorchid",
+    color = "darkorchid",
+    alpha = 0.7,
+    size = 3,
+    shape=21
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_fill_gradient2(
+    low = "#d1492d",
+    mid = "#fde09f",
+    high = "#00798c"
+  ) +
+  scale_colour_gradient2(
+    low = "#d1492d",
+    mid = "#FFE6BE",
+    high = "#00798c",
+    midpoint = 0.1,
+    breaks = c(-0.25, 0, 0.25, 0.5, 1, 1.5, 2)
+  ) +
+  theme(legend.title = element_blank(),
+        legend.position = c(2, 9)) +
+  theme_cowplot()
+```
+
+## Birds only
+```{r}
+all_birds %>%
+  filter(sex_diff_male_female > -0.7) %>%
+  mutate(sex.diff.log = log10(male)-log10(female))%>%
+    arrange(sex.diff.log) %>%               # sort your dataframe
+  mutate(taxon = factor(taxon, unique(taxon)))%>% # reset your factor-column based on that order
+  ggplot(.
+         ,
+         aes(x = taxon,
+             y = sex.diff.log,
+             fill = sex.diff.log,
+             color = sex.diff.log)) +
+  geom_col() +
+  geom_col(
+     data = all_birds %>%
+  filter(sex_diff_male_female > -0.7) %>%
+  mutate(sex.diff.log = log10(male)-log10(female))%>%
+  filter(crane_y_n == 1)%>%
+    arrange(taxon, sex.diff.log),
+  fill = "black",
+  color = "black",
+  width = 0.01
+  ) +
+   scale_fill_gradient2(low = "#d1495b", mid = "#fde09f", high = "#00798c", midpoint = 0, breaks = c(-0.0001,0,0.001))+
+   scale_colour_gradient2(low = "#d1495b", mid = "#fde09f", high = "#00798c", midpoint = 0, breaks = c(-0.0001,0,0.001))+
+  theme(
+    legend.position = "none",
+    legend.title = element_blank(),
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+  
+
+```
+
+## Birds only SDI
+```{r}
+
+
+all_birds %>%
+  arrange(SDI) %>%               # sort your dataframe
+  mutate(taxon = factor(taxon, unique(taxon)))%>% # reset your factor-column based on that order
+  ggplot(.
+         ,
+         aes(x = taxon,
+             y = (SDI*100),
+             color = (SDI*100))) +
+  geom_col(position = "dodge2") +
+  geom_col(
+    data = all_birds %>%
+      filter(crane_y_n == 1),
+    fill = "black",
+    color = "black",
+    width = 0.01
+  ) +
+#   scale_color_gradient2(
+#   low = munsell::mnsl("5B 7/8"),
+#   high = munsell::mnsl("5Y 7/8"),
+#   mid = munsell::mnsl("N 7/0"),
+#   midpoint = .02
+# ) +
+  scale_fill_gradient2(low = "#d1495b", mid = "#fde09f", high = "#00798c", midpoint = 0, breaks = c(-2,0,2))+
+   scale_colour_gradient2(low = "#d1495b", mid = "#fde09f", high = "#00798c", midpoint = 0, breaks = c(-0.2,0,0.2))+
+  theme(
+    legend.position = "none",
+    legend.title = element_blank(),
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+  
+
+```
+
+
+## Birds only
+```{r}
+all_birds %>%
+  filter(sex_diff_male_female > -0.7) %>%
+  mutate(sex.diff.log = log10(male)-log10(female))%>%
+    arrange(sex.diff.log) %>%               # sort your dataframe
+  mutate(taxon = factor(taxon, unique(taxon)))%>% # reset your factor-column based on that order
+  ggplot(.
+         ,
+         aes(x = log10(male),
+             y = sex.diff.log,
+             fill = SDI,
+             color = SDI)) +
+  geom_point(alpha=0.5) +
+  geom_point(
+     data = all_birds %>%
+  filter(sex_diff_male_female > -0.7) %>%
+  mutate(sex.diff.log = log10(male)-log10(female))%>%
+  filter(crane_y_n == 1)%>%
+    arrange(taxon, sex.diff.log),
+  aes(),
+  fill = "darkorchid",
+  color = "darkorchid",
+  alpha=0.7,
+  size=3
+  
+  ) +
+  geom_hline(yintercept=0, linetype="dashed")+
+   scale_fill_gradient2(low = "#d1492d", mid = "#fde09f", high = "#00798c", midpoint = 0.4, breaks=c(0.3, 0.5))+
+   scale_colour_gradient2(low = "#d1492d", mid = "#fde09f", high = "#00798c", midpoint = 0.4,breaks=c(0.3, 0.5))+
+  theme(
+    legend.title = element_blank()
+  )+
+  theme_cowplot()
+  
+
+```
+
+```{r}
+all_birds %>%
+  #filter(sex_diff_male_female > -0.7) %>%
+  mutate(sex.diff.log = log10(male) - log10(female)) %>%
+  arrange(SDI) %>%               # sort your dataframe
+  mutate(taxon = factor(taxon, unique(taxon))) %>% # reset your factor-column based on that order
+  ggplot(.
+         ,
+         aes(
+           x = log10(male),
+           y = SDI,
+           fill = SDI,
+           color = SDI
+         )) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm",
+              color = "grey57",
+              size = 1) +
+  geom_point(
+    data = all_birds %>%
+      #filter(sex_diff_male_female > -0.7) %>%
+      mutate(sex.diff.log = log10(male) - log10(female)) %>%
+      filter(crane_y_n == 1) %>%
+      arrange(taxon, SDI),
+    aes(),
+    fill = "darkorchid",
+    color = "darkorchid",
+    alpha = 0.7,
+    size = 3,
+    shape=21
+  ) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  scale_fill_gradient2(
+    low = "#d1492d",
+    mid = "#fde09f",
+    high = "#00798c"
+  ) +
+  scale_colour_gradient2(
+    low = "#d1492d",
+    mid = "#FFE6BE",
+    high = "#00798c",
+    midpoint = 0.1,
+    breaks = c(-0.25, 0, 0.25, 0.5, 1, 1.5, 2)
+  ) +
+  theme(legend.title = element_blank(),
+        legend.position = c(2, 9)) +
+  theme_cowplot()
+
+
+
+
+```
+
+# Density all birds
+```{r}
+all_birds %>%
+  #filter(sex_diff_male_female > -0.7) %>%
+  mutate(sex.diff.log = log10(male) - log10(female)) %>%
+  arrange(SDI) %>%               # sort your dataframe
+  mutate(taxon = factor(taxon, unique(taxon))) %>% # reset your factor-column based on that order
+  ggplot(.
+         ,
+         aes(
+           x = sex.diff.log,
+           fill = SDI,
+           color = SDI
+         )) +
+  geom_density(alpha = 0.5) +
+  geom_point(
+    data = all_birds %>%
+      #filter(sex_diff_male_female > -0.7) %>%
+      mutate(sex.diff.log = log10(male) - log10(female)) %>%
+      filter(crane_y_n == 1) %>%
+      arrange(taxon, SDI),
+    aes(y=0),
+    fill = "darkorchid",
+    color = "darkorchid",
+    alpha = 0.7,
+    size = 3,
+    shape=21
+  ) +
+  scale_fill_gradient2(
+    low = "#d1492d",
+    mid = "#fde09f",
+    high = "#00798c"
+  ) +
+  theme(legend.title = element_blank(),
+        legend.position = c(2, 9)) +
+  theme_cowplot()
+
+```
+# References
