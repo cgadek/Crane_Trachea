@@ -24,7 +24,7 @@ long migratory paths M. Jones and Witt (2014). Here we grow the dataset
 from M. Jones and Witt (2014) to ask if the intraspecific cryptic size
 dimorphism they found in Sandhill Cranes is present as another layer
 divergence between subspecies. We look for, quantify, and evaluate
-mechanisms of cryptic *sexual* size dimorphism between subspecies.
+mechanisms of cryptic **sexual** size dimorphism between subspecies.
 
 # References
 
