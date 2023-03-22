@@ -2,14 +2,14 @@
 
 ## Cryptic sexual size dimorphism
 
-Cryptic size dimorphism (CSDI) is a bit of a strange term. How can size
+Cryptic size dimorphism (CSD) is a bit of a strange term. How can size
 dimorphism be cryptic. If we can say sizes are different doesn’t that
 imply we (humans) can detect the difference. After all cryptic as a
 concept in biology largely relies on the human frame of reference. We
 cannot tell what differences other animals can detect. No they do not
 all look/smell/sound/chemically signal the same.
 
-From a human standpoint, as if I could speak to any other, CSDI often
+From a human standpoint, as if I could speak to any other, CSD often
 refers to allometric scaling differences between the sexes, where one
 sexes body part is larger than expected given body size.
 
@@ -21,11 +21,10 @@ the proportionally longer trachea act to signal larger body size through
 acoustic modulation of formant spacing Fitch (1999), M. R. Jones and
 Witt (2012). This can compensate for constraints on body size by like
 long migratory paths M. Jones and Witt (2014). Here we grow the dataset
-from M. Jones and Witt (2014) to ask if the intraspecific <u>cryptic
-size dimorphism<u> they found in Sandhill Cranes is present as another
-layer divergence between subspecies. Here we look for, quantify, and
-evaluate mechanisms of cryptic <u>sexual<u> size dimorphism between
-subspecies.
+from M. Jones and Witt (2014) to ask if the intraspecific cryptic size
+dimorphism they found in Sandhill Cranes is present as another layer
+divergence between subspecies. We look for, quantify, and evaluate
+mechanisms of cryptic *sexual* size dimorphism between subspecies.
 
 # References
 
