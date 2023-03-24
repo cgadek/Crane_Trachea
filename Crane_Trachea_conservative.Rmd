@@ -36,7 +36,7 @@ h1, .h1, h2, .h2, h3, .h3, h4, .h4, h5, .h5 {
 ```{R, echo=FALSE}
 # I set some GLOBAL R chunk options here.
 #   (to hide this message add "echo=FALSE" to the code chunk options)
-rm(list =ls (all = TRUE)) #This removes objects from global environ
+#rm(list =ls (all = TRUE)) #This removes objects from global environ
 knitr::opts_chunk$set(echo=F, comment = NA, message = FALSE, warning = FALSE, width = 100)
 knitr::opts_chunk$set(fig.align = "center", fig.height = 4, fig.width = 6)
 
@@ -459,7 +459,8 @@ ggsave(
   bg = "transparent",
   height = 4.5,
   width = 5,
-  units = "in"
+  units = "in",
+  device= cairo_pdf
 )
 
 ```
@@ -496,7 +497,8 @@ ggsave(
   bg = "transparent",
   height = 4.5,
   width = 5,
-  units = "in"
+  units = "in",
+  device= cairo_pdf
 )
 
 ```
@@ -529,7 +531,8 @@ ggsave(
   bg = "transparent",
   height = 4.5,
   width = 5,
-  units = "in"
+  units = "in",
+  device=cairo_pdf
 )
 
 ```
@@ -537,7 +540,7 @@ ggsave(
 ### Plot mass by subspecies and sex
 
 ```{r, echo=F, eval=F}
-#violin plot
+
 p <- dat.s %>%
   group_by(taxon_name, sex) %>%
   filter(!bursa %in% c("yes")) %>%
@@ -563,7 +566,8 @@ ggsave(
   bg = "transparent",
   height = 4.5,
   width = 5,
-  units = "in"
+  units = "in",
+  device=cairo_pdf
 )
 
 ```
@@ -1465,6 +1469,7 @@ pca.data<- as.data.frame(pca.f$x)
 pca.data$species <- pca.cols.to.add$taxon_name.x
 pca.data$sex <- pca.cols.to.add$sex
 pca.data$mass <- pca.cols.to.add$mass
+pca.data$log_mass.z <- scale(log10(pca.cols.to.add$mass))
 
  
 #find distances between greater sexes
@@ -1628,11 +1633,11 @@ source("functions/model_runners.R")
 #  filter(bursa %in% c("N", "N "))
 
 #run models
-run_my_mtl_models(dat.g, "greater_mtl_models", seed=6)
-run_my_mtl_models(dat.l, "lesser_mtl_models", seed=6)
-
-save(greater_mtl_models, file=paste0(models, "greater_mtl_models.Rdata"))
-save(lesser_mtl_models, file=paste0(models, "lesser_mtl_models.Rdata"))
+# run_my_mtl_models(dat.g, "greater_mtl_models", seed=6)
+# run_my_mtl_models(dat.l, "lesser_mtl_models", seed=6)
+# 
+# save(greater_mtl_models, file=paste0(models, "greater_mtl_models.Rdata"))
+# save(lesser_mtl_models, file=paste0(models, "lesser_mtl_models.Rdata"))
 
 load(file=paste0(models, "greater_mtl_models.Rdata"))
 load(file=paste0(models, "lesser_mtl_models.Rdata"))
@@ -1644,8 +1649,12 @@ load(file=paste0(models, "lesser_mtl_models.Rdata"))
 First look at Rhat values, ESS (n_eff), and parameter estimates.
 Greaters first
 ```{r}
-greater_mass_models[[3]][[1]][["fit"]]
-greater_mass_models[[3]][[2]][["fit"]]
+greater_mtl_models[[3]][[1]][["fit"]]
+greater_mtl_models[[3]][[2]][["fit"]]
+greater_mtl_models[[3]][[3]][["fit"]]
+greater_mtl_models[[3]][[4]][["fit"]]
+greater_mtl_models[[3]][[5]][["fit"]]
+
 
 ```
 No R hat over 1 and acceptable ESS.
@@ -1653,8 +1662,12 @@ No R hat over 1 and acceptable ESS.
 
 Lessers
 ```{r}
-lesser_mass_models[[3]][[1]][["fit"]]
-lesser_mass_models[[3]][[2]][["fit"]]
+lesser_mtl_models[[3]][[1]][["fit"]]
+lesser_mtl_models[[3]][[2]][["fit"]]
+lesser_mtl_models[[3]][[3]][["fit"]]
+lesser_mtl_models[[3]][[4]][["fit"]]
+lesser_mtl_models[[3]][[5]][["fit"]]
+
 
 ```
 No R hat over 1 and acceptable ESS.
@@ -1665,9 +1678,9 @@ Null: log10(mtl) ~ 1
 ```{r, `greaterMTLppcheck`, figures-side, fig.show="hold", out.width="33%"}
 
 color_scheme_set(scheme = "darkgray")
-pp_check(greater_mass_models[[3]][[1]], ndraws = 100) 
-pp_check(greater_mass_models[[3]][[1]], type = "stat", stat = 'median', ndraws = 2000)
-pp_check(greater_mass_models[[3]][[1]], type = "stat", stat = 'mean', ndraws = 2000)
+pp_check(greater_mtl_models[[3]][[1]], ndraws = 100) 
+pp_check(greater_mtl_models[[3]][[1]], type = "stat", stat = 'median', ndraws = 2000)
+pp_check(greater_mtl_models[[3]][[1]], type = "stat", stat = 'mean', ndraws = 2000)
 
 ```
 
@@ -1675,19 +1688,29 @@ Two-term additive: log10(mtl) ~ log10(mass)
 ```{r, `greaterMTLppcheck`, figures-side, fig.show="hold", out.width="33%"}
 
 color_scheme_set(scheme = "darkgray")
-pp_check(greater_mass_models[[3]][[2]], ndraws = 100) 
-pp_check(greater_mass_models[[3]][[2]], type = "stat", stat = 'median', ndraws = 2000)
-pp_check(greater_mass_models[[3]][[2]], type = "stat", stat = 'mean', ndraws = 2000)
+pp_check(greater_mtl_models[[3]][[2]], ndraws = 100) 
+pp_check(greater_mtl_models[[3]][[2]], type = "stat", stat = 'median', ndraws = 2000)
+pp_check(greater_mtl_models[[3]][[2]], type = "stat", stat = 'mean', ndraws = 2000)
 
 ```
 
-Full additive: log10(mtl) ~ log10(mass) + sex
+Full additive: log10(mtl) ~ sex
 ```{r, `greaterMTLppcheck`, figures-side, fig.show="hold", out.width="33%"}
 
 color_scheme_set(scheme = "darkgray")
-pp_check(greater_mass_models[[3]][[3]], ndraws = 100) 
-pp_check(greater_mass_models[[3]][[3]], type = "stat", stat = 'median', ndraws = 2000)
-pp_check(greater_mass_models[[3]][[3]], type = "stat", stat = 'mean', ndraws = 2000)
+pp_check(greater_mtl_models[[3]][[3]], ndraws = 100) 
+pp_check(greater_mtl_models[[3]][[3]], type = "stat", stat = 'median', ndraws = 2000)
+pp_check(greater_mtl_models[[3]][[3]], type = "stat", stat = 'mean', ndraws = 2000)
+
+```
+
+Full Additive: mtl ~ mass + sex
+```{r, `greaterMTLppcheck`, figures-side, fig.show="hold", out.width="33%"}
+
+color_scheme_set(scheme = "darkgray")
+pp_check(greater_mtl_models[[3]][[4]], ndraws = 100) 
+pp_check(greater_mtl_models[[3]][[4]], type = "stat", stat = 'median', ndraws = 2000)
+pp_check(greater_mtl_models[[3]][[4]], type = "stat", stat = 'mean', ndraws = 2000)
 
 ```
 
@@ -1695,9 +1718,9 @@ Interaction: log10(mtl) ~ log10(mass) x sex
 ```{r, `greaterMTLppcheck`, figures-side, fig.show="hold", out.width="33%"}
 
 color_scheme_set(scheme = "darkgray")
-pp_check(greater_mass_models[[3]][[4]], ndraws = 100) 
-pp_check(greater_mass_models[[3]][[4]], type = "stat", stat = 'median', ndraws = 2000)
-pp_check(greater_mass_models[[3]][[4]], type = "stat", stat = 'mean', ndraws = 2000)
+pp_check(greater_mtl_models[[3]][[5]], ndraws = 100) 
+pp_check(greater_mtl_models[[3]][[5]], type = "stat", stat = 'median', ndraws = 2000)
+pp_check(greater_mtl_models[[3]][[5]], type = "stat", stat = 'mean', ndraws = 2000)
 
 ```
 
@@ -1706,9 +1729,9 @@ Null: log10(mtl) ~ 1
 ```{r, `lesserMTLppcheck`, figures-side, fig.show="hold", out.width="33%"}
 
 color_scheme_set(scheme = "darkgray")
-pp_check(lesser_mass_models[[3]][[1]], ndraws = 100) 
-pp_check(lesser_mass_models[[3]][[1]], type = "stat", stat = 'median', ndraws = 2000)
-pp_check(lesser_mass_models[[3]][[1]], type = "stat", stat = 'mean', ndraws = 2000)
+pp_check(lesser_mtl_models[[3]][[1]], ndraws = 100) 
+pp_check(lesser_mtl_models[[3]][[1]], type = "stat", stat = 'median', ndraws = 2000)
+pp_check(lesser_mtl_models[[3]][[1]], type = "stat", stat = 'mean', ndraws = 2000)
 
 ```
 
@@ -1716,9 +1739,9 @@ Two-term additive: log10(mtl) ~ log10(mass)
 ```{r, `lesserMTLppcheck`, figures-side, fig.show="hold", out.width="33%"}
 
 color_scheme_set(scheme = "darkgray")
-pp_check(lesser_mass_models[[3]][[2]], ndraws = 100) 
-pp_check(lesser_mass_models[[3]][[2]], type = "stat", stat = 'median', ndraws = 2000)
-pp_check(lesser_mass_models[[3]][[2]], type = "stat", stat = 'mean', ndraws = 2000)
+pp_check(lesser_mtl_models[[3]][[2]], ndraws = 100) 
+pp_check(lesser_mtl_models[[3]][[2]], type = "stat", stat = 'median', ndraws = 2000)
+pp_check(lesser_mtl_models[[3]][[2]], type = "stat", stat = 'mean', ndraws = 2000)
 
 ```
 
@@ -1726,9 +1749,9 @@ Full additive: log10(mtl) ~ log10(mass) + sex
 ```{r, `lesserMTLppcheck`, figures-side, fig.show="hold", out.width="33%"}
 
 color_scheme_set(scheme = "darkgray")
-pp_check(lesser_mass_models[[3]][[3]], ndraws = 100) 
-pp_check(lesser_mass_models[[3]][[3]], type = "stat", stat = 'median', ndraws = 2000)
-pp_check(lesser_mass_models[[3]][[3]], type = "stat", stat = 'mean', ndraws = 2000)
+pp_check(lesser_mtl_models[[3]][[3]], ndraws = 100) 
+pp_check(lesser_mtl_models[[3]][[3]], type = "stat", stat = 'median', ndraws = 2000)
+pp_check(lesser_mtl_models[[3]][[3]], type = "stat", stat = 'mean', ndraws = 2000)
 
 ```
 
@@ -1736,9 +1759,19 @@ Interaction: log10(mtl) ~ log10(mass) x sex
 ```{r, `lesserMTLppcheck`, figures-side, fig.show="hold", out.width="33%"}
 
 color_scheme_set(scheme = "darkgray")
-pp_check(lesser_mass_models[[3]][[4]], ndraws = 100) 
-pp_check(lesser_mass_models[[3]][[4]], type = "stat", stat = 'median', ndraws = 2000)
-pp_check(lesser_mass_models[[3]][[4]], type = "stat", stat = 'mean', ndraws = 2000)
+pp_check(lesser_mtl_models[[3]][[4]], ndraws = 100) 
+pp_check(lesser_mtl_models[[3]][[4]], type = "stat", stat = 'median', ndraws = 2000)
+pp_check(lesser_mtl_models[[3]][[4]], type = "stat", stat = 'mean', ndraws = 2000)
+
+```
+
+Interaction: log10(mtl) ~ log10(mass) x sex
+```{r, `lesserMTLppcheck`, figures-side, fig.show="hold", out.width="33%"}
+
+color_scheme_set(scheme = "darkgray")
+pp_check(lesser_mtl_models[[3]][[5]], ndraws = 100) 
+pp_check(lesser_mtl_models[[3]][[5]], type = "stat", stat = 'median', ndraws = 2000)
+pp_check(lesser_mtl_models[[3]][[5]], type = "stat", stat = 'mean', ndraws = 2000)
 
 ```
 
@@ -1746,7 +1779,7 @@ pp_check(lesser_mass_models[[3]][[4]], type = "stat", stat = 'mean', ndraws = 20
 greaters
 ```{r}
 
-greater_mass_models[[3]][[5]]
+greater_mtl_models[[3]][[6]]
 
 ```
 Interaction model is top supported model.
@@ -1754,10 +1787,11 @@ Interaction model is top supported model.
 Bayes R^2
 ```{r}
 
-greater_mass_models[[3]][[6]][[1]]
-greater_mass_models[[3]][[6]][[2]]
-greater_mass_models[[3]][[6]][[3]]
-greater_mass_models[[3]][[6]][[4]]
+greater_mtl_models[[3]][[7]][[1]]
+greater_mtl_models[[3]][[7]][[2]]
+greater_mtl_models[[3]][[7]][[3]]
+greater_mtl_models[[3]][[7]][[4]]
+greater_mtl_models[[3]][[7]][[5]]
 
 ```
 
@@ -1765,7 +1799,7 @@ lessers
 LOOIC
 ```{r}
 
-lesser_mass_models[[3]][[5]]
+lesser_mtl_models[[3]][[6]]
 
 ```
 Full additive model (F3) is best for lessers, though interaction model is close and is AIC rules apply for elpd then they are equivalent.
@@ -1774,10 +1808,11 @@ Full additive model (F3) is best for lessers, though interaction model is close 
 Bayes R^2
 ```{r}
 
-lesser_mass_models[[3]][[6]][[1]]
-lesser_mass_models[[3]][[6]][[2]]
-lesser_mass_models[[3]][[6]][[3]]
-lesser_mass_models[[3]][[6]][[4]]
+lesser_mtl_models[[3]][[7]][[1]]
+lesser_mtl_models[[3]][[7]][[2]]
+lesser_mtl_models[[3]][[7]][[3]]
+lesser_mtl_models[[3]][[7]][[4]]
+lesser_mtl_models[[3]][[7]][[5]]
 
 ```
 
@@ -1785,9 +1820,9 @@ lesser_mass_models[[3]][[6]][[4]]
 ## Conditional effects
 Here we plot conditional effects from best model for greaters
 ```{r, `conEffectGreater`, figures-side, fig.show="hold", out.width="50%"}
-ce <- conditional_effects(greater_mass_models[[3]][[4]])
+ce1 <- conditional_effects(greater_mtl_models[[3]][[5]])
 
-p <- ggplot(ce$log_mass.z, aes(log_mass.z, estimate__))+
+p <- ggplot(ce1$log_mass.z, aes(log_mass.z, estimate__))+
   geom_ribbon(aes(ymin=lower__, ymax=upper__), fill="grey")+
   geom_line(color="black", linetype="dashed")+
   labs( x=expression(log["10"](mass~(g))), y=expression(log["10"]("mean trachea length (mm)")))
@@ -1795,7 +1830,7 @@ p
 ggsave(p +theme(), filename = paste0(figures,"Greater_cond_eff_mtl-mass_conservative.pdf"), height = 4, width = 4.6, units = "in", device = cairo_pdf)
 
 
-p1 <- ggplot(ce$`log_mass.z:sex`, aes(log_mass.z, estimate__, fill=sex))+
+p1 <- ggplot(ce1$`log_mass.z:sex`, aes(log_mass.z, estimate__, fill=sex))+
   geom_ribbon(aes(ymin=lower__, ymax=upper__), alpha=0.5)+
   geom_line(color="black", linetype="dashed")+
   scale_fill_sex("sexes")+
@@ -1808,9 +1843,9 @@ ggsave(p1 +theme(), filename = paste0(figures,"Greater_cond_eff_mtl-mass-int-sex
 lessers
 ```{r, `conEffectLesser`, figures-side, fig.show="hold", out.width="50%"}
 #HERE WE USE the Interaction model just of exmine basically equivalent models
-ce <- conditional_effects(lesser_mass_models[[3]][[4]])
+ce <- conditional_effects(lesser_mtl_models[[3]][[5]])
 
-p <- ggplot(ce$log_mass.z, aes(log_mass.z, estimate__))+
+p <- ggplot(ce$log_mass.z, aes(log_mass.z, estimate__, group=sex))+
   geom_ribbon(aes(ymin=lower__, ymax=upper__), fill="grey")+
   geom_line(color="black", linetype="dashed")+
   labs( x=expression(log["10"](mass~(g))), y=expression(log["10"]("mean trachea length (mm)")))
@@ -1824,6 +1859,19 @@ p1 <- ggplot(ce$`log_mass.z:sex`, aes(log_mass.z, estimate__, fill=sex))+
   labs( x=expression(log["10"](mass~(g))), y=expression(log["10"]("mean trachea length (mm)")))
 p1
 ggsave(p1 +theme(), filename = paste0(figures,"Lesser_cond_eff_mtl-mass-int-sex_conservative.pdf"), height = 4, width = 4.6, units = "in", device = cairo_pdf)
+
+```
+
+```{r}
+p1 <- ggplot()+
+  geom_line(data=ce$log_mass.z, aes(log_mass.z, estimate__),color="black", linetype="dashed")+
+  geom_ribbon(data=ce$log_mass.z, aes(x=log_mass.z, ymin=lower__, ymax=upper__), alpha=0.5, fill="seashell3")+
+  geom_line(data=ce1$log_mass.z, aes(log_mass.z, estimate__),color="black", linetype="dashed")+
+  geom_ribbon(data=ce1$log_mass.z, aes(x=log_mass.z, ymin=lower__, ymax=upper__), alpha=0.5, fill="#A62800")+
+  labs( x=expression(log["10"](mass~(g))), y=expression(log["10"]("mean trachea length (mm)")))
+p1
+ggsave(p1 +theme(), filename = paste0(figures,"Greater-and_lesser_cond_eff_mtl-mass_conservative.pdf"), height = 4, width = 4.6, units = "in", device = cairo_pdf)
+
 
 ```
 
@@ -2059,11 +2107,11 @@ source("functions/model_runners.R")
 #  filter(bursa %in% c("N", "N "))
 
 #run models
-# run_my_mass_models(dat.g, "greater_mass_models", seed=6)
-# run_my_mass_models(dat.l, "lesser_mass_models", seed=6)
-# 
-# save(greater_mass_models, file=paste0(models, "greater_mass_models.Rdata"))
-# save(lesser_mass_models, file=paste0(models, "lesser_mass_models.Rdata"))
+run_my_mass_models(dat.g, "greater_mass_models", seed=6)
+run_my_mass_models(dat.l, "lesser_mass_models", seed=6)
+
+save(greater_mass_models, file=paste0(models, "greater_mass_models.Rdata"))
+save(lesser_mass_models, file=paste0(models, "lesser_mass_models.Rdata"))
 
 load(file=paste0(models, "greater_mass_models.Rdata"))
 load(file=paste0(models, "lesser_mass_models.Rdata"))
@@ -2076,10 +2124,9 @@ load(file=paste0(models, "lesser_mass_models.Rdata"))
 First look at Rhat values, ESS (n_eff), and parameter estimates.
 Greaters first
 ```{r}
-greater_mtl_models[[3]][[1]][["fit"]]
-greater_mtl_models[[3]][[2]][["fit"]]
-greater_mtl_models[[3]][[3]][["fit"]]
-greater_mtl_models[[3]][[4]][["fit"]]
+greater_mass_models[[3]][[1]][["fit"]]
+greater_mass_models[[3]][[2]][["fit"]]
+greater_mass_models[[3]][[3]][["fit"]]
 
 ```
 No R hat over 1 and acceptable ESS.
@@ -2087,94 +2134,74 @@ No R hat over 1 and acceptable ESS.
 
 Lessers
 ```{r}
-lesser_mtl_models[[3]][[1]][["fit"]]
-lesser_mtl_models[[3]][[2]][["fit"]]
-lesser_mtl_models[[3]][[3]][["fit"]]
-lesser_mtl_models[[3]][[4]][["fit"]]
-
+lesser_mass_models[[3]][[1]][["fit"]]
+lesser_mass_models[[3]][[2]][["fit"]]
+lesser_mass_models[[3]][[3]][["fit"]]
 ```
 No R hat over 1 and acceptable ESS.
 
 ### PP checks
 Greaters
-Null: log10(mtl) ~ 1
-```{r, `greaterMTLppcheck`, figures-side, fig.show="hold", out.width="33%"}
+Null: log10(mass) ~ 1
+```{r, `greaterMassppcheck`, figures-side, fig.show="hold", out.width="33%"}
 
 color_scheme_set(scheme = "darkgray")
-pp_check(greater_mtl_models[[3]][[1]], ndraws = 100) 
-pp_check(greater_mtl_models[[3]][[1]], type = "stat", stat = 'median', ndraws = 2000)
-pp_check(greater_mtl_models[[3]][[1]], type = "stat", stat = 'mean', ndraws = 2000)
+pp_check(greater_mass_models[[3]][[1]], ndraws = 100) 
+pp_check(greater_mass_models[[3]][[1]], type = "stat", stat = 'median', ndraws = 2000)
+pp_check(greater_mass_models[[3]][[1]], type = "stat", stat = 'mean', ndraws = 2000)
 
 ```
 
-Two-term additive: log10(mtl) ~ log10(mass)
-```{r, `greaterMTLppcheck`, figures-side, fig.show="hold", out.width="33%"}
+Two-term additive: log10(mass) ~ sex
+```{r, `greaterMassppcheck`, figures-side, fig.show="hold", out.width="33%"}
 
 color_scheme_set(scheme = "darkgray")
-pp_check(greater_mtl_models[[3]][[2]], ndraws = 100) 
-pp_check(greater_mtl_models[[3]][[2]], type = "stat", stat = 'median', ndraws = 2000)
-pp_check(greater_mtl_models[[3]][[2]], type = "stat", stat = 'mean', ndraws = 2000)
+pp_check(greater_mass_models[[3]][[2]], ndraws = 100) 
+pp_check(greater_mass_models[[3]][[2]], type = "stat", stat = 'median', ndraws = 2000)
+pp_check(greater_mass_models[[3]][[2]], type = "stat", stat = 'mean', ndraws = 2000)
 
 ```
 
-Full additive: log10(mtl) ~ log10(mass) + sex
-```{r, `greaterMTLppcheck`, figures-side, fig.show="hold", out.width="33%"}
+Full additive distributional: log10(mass) ~ sex, sigma ~ sex
+```{r, `greaterMassppcheck`, figures-side, fig.show="hold", out.width="33%"}
 
 color_scheme_set(scheme = "darkgray")
-pp_check(greater_mtl_models[[3]][[3]], ndraws = 100) 
-pp_check(greater_mtl_models[[3]][[3]], type = "stat", stat = 'median', ndraws = 2000)
-pp_check(greater_mtl_models[[3]][[3]], type = "stat", stat = 'mean', ndraws = 2000)
+pp_check(greater_mass_models[[3]][[3]], ndraws = 100) 
+pp_check(greater_mass_models[[3]][[3]], type = "stat", stat = 'median', ndraws = 2000)
+pp_check(greater_mass_models[[3]][[3]], type = "stat", stat = 'mean', ndraws = 2000)
 
 ```
 
-Interaction: log10(mtl) ~ log10(mass) x sex
-```{r, `greaterMTLppcheck`, figures-side, fig.show="hold", out.width="33%"}
 
-color_scheme_set(scheme = "darkgray")
-pp_check(greater_mtl_models[[3]][[4]], ndraws = 100) 
-pp_check(greater_mtl_models[[3]][[4]], type = "stat", stat = 'median', ndraws = 2000)
-pp_check(greater_mtl_models[[3]][[4]], type = "stat", stat = 'mean', ndraws = 2000)
-
-```
 
 Lessers
-Null: log10(mtl) ~ 1
-```{r, `lesserMTLppcheck`, figures-side, fig.show="hold", out.width="33%"}
+Null: log10(mass) ~ 1
+```{r, `lesserMassppcheck`, figures-side, fig.show="hold", out.width="33%"}
 
 color_scheme_set(scheme = "darkgray")
-pp_check(lesser_mtl_models[[3]][[1]], ndraws = 100) 
-pp_check(lesser_mtl_models[[3]][[1]], type = "stat", stat = 'median', ndraws = 2000)
-pp_check(lesser_mtl_models[[3]][[1]], type = "stat", stat = 'mean', ndraws = 2000)
+pp_check(lesser_mass_models[[3]][[1]], ndraws = 100) 
+pp_check(lesser_mass_models[[3]][[1]], type = "stat", stat = 'median', ndraws = 2000)
+pp_check(lesser_mass_models[[3]][[1]], type = "stat", stat = 'mean', ndraws = 2000)
 
 ```
 
-Two-term additive: log10(mtl) ~ log10(mass)
-```{r, `lesserMTLppcheck`, figures-side, fig.show="hold", out.width="33%"}
+Two-term additive: log10(mass) ~ sex
+```{r, `lesserMassppcheck`, figures-side, fig.show="hold", out.width="33%"}
 
 color_scheme_set(scheme = "darkgray")
-pp_check(lesser_mtl_models[[3]][[2]], ndraws = 100) 
-pp_check(lesser_mtl_models[[3]][[2]], type = "stat", stat = 'median', ndraws = 2000)
-pp_check(lesser_mtl_models[[3]][[2]], type = "stat", stat = 'mean', ndraws = 2000)
+pp_check(lesser_mass_models[[3]][[2]], ndraws = 100) 
+pp_check(lesser_mass_models[[3]][[2]], type = "stat", stat = 'median', ndraws = 2000)
+pp_check(lesser_mass_models[[3]][[2]], type = "stat", stat = 'mean', ndraws = 2000)
 
 ```
 
-Full additive: log10(mtl) ~ log10(mass) + sex
-```{r, `lesserMTLppcheck`, figures-side, fig.show="hold", out.width="33%"}
+Full additive distributional: log10(mass) ~ sex, sigma ~ sex
+```{r, `lesserMassppcheck`, figures-side, fig.show="hold", out.width="33%"}
 
 color_scheme_set(scheme = "darkgray")
-pp_check(lesser_mtl_models[[3]][[3]], ndraws = 100) 
-pp_check(lesser_mtl_models[[3]][[3]], type = "stat", stat = 'median', ndraws = 2000)
-pp_check(lesser_mtl_models[[3]][[3]], type = "stat", stat = 'mean', ndraws = 2000)
-
-```
-
-Interaction: log10(mtl) ~ log10(mass) x sex
-```{r, `lesserMTLppcheck`, figures-side, fig.show="hold", out.width="33%"}
-
-color_scheme_set(scheme = "darkgray")
-pp_check(lesser_mtl_models[[3]][[4]], ndraws = 100) 
-pp_check(lesser_mtl_models[[3]][[4]], type = "stat", stat = 'median', ndraws = 2000)
-pp_check(lesser_mtl_models[[3]][[4]], type = "stat", stat = 'mean', ndraws = 2000)
+pp_check(lesser_mass_models[[3]][[3]], ndraws = 100) 
+pp_check(lesser_mass_models[[3]][[3]], type = "stat", stat = 'median', ndraws = 2000)
+pp_check(lesser_mass_models[[3]][[3]], type = "stat", stat = 'mean', ndraws = 2000)
 
 ```
 
@@ -2182,18 +2209,18 @@ pp_check(lesser_mtl_models[[3]][[4]], type = "stat", stat = 'mean', ndraws = 200
 ### greater
 ```{r}
 
-greater_mtl_models[[3]][[5]]
+greater_mass_models[[3]][[4]]
 
 ```
-Interaction model is top supported model.
+simple additive model is top supported model.
 
 Bayes R^2
 ```{r}
 
-greater_mtl_models[[3]][[6]][[1]]
-greater_mtl_models[[3]][[6]][[2]]
-greater_mtl_models[[3]][[6]][[3]]
-greater_mtl_models[[3]][[6]][[4]]
+greater_mass_models[[3]][[5]][[1]]
+greater_mass_models[[3]][[5]][[2]]
+greater_mass_models[[3]][[5]][[3]]
+
 
 ```
 
@@ -2201,19 +2228,19 @@ greater_mtl_models[[3]][[6]][[4]]
 LOOIC
 ```{r}
 
-lesser_mtl_models[[3]][[5]]
+lesser_mass_models[[3]][[4]]
 
 ```
-Full additive model (F3) is best for lessers, though interaction model is close and is AIC rules apply for elpd then they are equivalent.
+Full additive model (F3) distributional is best for lessers.
 
 
 Bayes R^2
 ```{r}
 
-lesser_mtl_models[[3]][[6]][[1]]
-lesser_mtl_models[[3]][[6]][[2]]
-lesser_mtl_models[[3]][[6]][[3]]
-lesser_mtl_models[[3]][[6]][[4]]
+lesser_mass_models[[3]][[5]][[1]]
+lesser_mass_models[[3]][[5]][[2]]
+lesser_mass_models[[3]][[5]][[3]]
+
 
 ```
 
@@ -2221,293 +2248,65 @@ lesser_mtl_models[[3]][[6]][[4]]
 ## Conditional effects
 Here we plot conditional effects from best model for greaters
 ```{r, `conEffectGreater`, figures-side, fig.show="hold", out.width="50%"}
-ce <- conditional_effects(greater_mtl_models[[3]][[4]])
-
-p <- ggplot(ce$log_mass.z, aes(log_mass.z, estimate__))+
-  geom_ribbon(aes(ymin=lower__, ymax=upper__), fill="grey")+
-  geom_line(color="black", linetype="dashed")+
-  labs( x=expression(log["10"](mass~(g))), y=expression(log["10"]("mean trachea length (mm)")))
-p
-ggsave(p +theme(), filename = paste0(figures,"Greater_cond_eff_mtl-mass_conservative.pdf"), height = 4, width = 4.6, units = "in", device = cairo_pdf)
-
-
-p1 <- ggplot(ce$`log_mass.z:sex`, aes(log_mass.z, estimate__, fill=sex))+
-  geom_ribbon(aes(ymin=lower__, ymax=upper__), alpha=0.5)+
-  geom_line(color="black", linetype="dashed")+
+ce <- conditional_effects(greater_mass_models[[3]][[2]])
+ce <- as.data.frame(ce$sex)
+p <- ggplot(ce, aes(sex, estimate__, fill=sex))+
+  geom_pointrange(aes(ymin=lower__, ymax=upper__), shape=21, size=2)+
   scale_fill_sex("sexes")+
   labs( x=expression(log["10"](mass~(g))), y=expression(log["10"]("mean trachea length (mm)")))
-p1
-ggsave(p1 +theme(), filename = paste0(figures,"Greater_cond_eff_mtl-mass-int-sex_conservative.pdf"), height = 4, width = 4.6, units = "in", device = cairo_pdf)
+p
+ggsave(p +theme(), filename = paste0(figures,"Greater_cond_eff_mass_sex_conservative.pdf"), height = 4.6, width = 5.6, units = "in", device = cairo_pdf)
+
 
 ```
 
 lessers
 ```{r, `conEffectLesser`, figures-side, fig.show="hold", out.width="50%"}
 #HERE WE USE the Interaction model just of exmine basically equivalent models
-ce <- conditional_effects(lesser_mtl_models[[3]][[4]])
-
-p <- ggplot(ce$log_mass.z, aes(log_mass.z, estimate__))+
-  geom_ribbon(aes(ymin=lower__, ymax=upper__), fill="grey")+
-  geom_line(color="black", linetype="dashed")+
-  labs( x=expression(log["10"](mass~(g))), y=expression(log["10"]("mean trachea length (mm)")))
-p
-ggsave(p +theme(), filename = paste0(figures,"Lesser_cond_eff_mtl-mass_conservative.pdf"), height = 4, width = 4.6, units = "in", device = cairo_pdf)
-
-p1 <- ggplot(ce$`log_mass.z:sex`, aes(log_mass.z, estimate__, fill=sex))+
-  geom_ribbon(aes(ymin=lower__, ymax=upper__), alpha=0.5)+
-  geom_line(color="black", linetype="dashed")+
+ce <- conditional_effects(lesser_mass_models[[3]][[2]])
+ce <- as.data.frame(ce$sex)
+p <- ggplot(ce, aes(sex, estimate__, fill=sex))+
+  geom_pointrange(aes(ymin=lower__, ymax=upper__), shape=21, size=2)+
   scale_fill_sex("sexes")+
   labs( x=expression(log["10"](mass~(g))), y=expression(log["10"]("mean trachea length (mm)")))
-p1
-ggsave(p1 +theme(), filename = paste0(figures,"Lesser_cond_eff_mtl-mass-int-sex_conservative.pdf"), height = 4, width = 4.6, units = "in", device = cairo_pdf)
-
-```
-
-### Sex only model
-
-```{r}
-#use this to get idea of priors then set your own!!
-# priors <-get_prior(log_mass ~ 1 + log_mtl  + sex,
-#                    data = dat.l, family = gaussian())
-
-hist(dat.l$log_mass)
-
-m.c.s.l <- brm(
-  formula = bf(log_mass ~ 1 + sex, sigma ~ sex),
-  data = dat.l,
-  family = skew_normal(),
-  cores = 4,
-  chains = 4,
-  thin = 10, #chop out transitions?
-  warmup = 10000, #half of iterations
-  iter = 20000,
-  #prior = priors,
-  save_pars = save_pars(all = TRUE), #need this for loo comparison
-  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
-  set.seed(2020)
-)
-
-save(m.c.s.l, file=paste(getwd(), "/models/", "crane_mass_lesser_catagorical_sex_only_fam_skew_normal.conservative.Rdata", sep="")) # save model
-
-#load("crane_mass_lesser_catagorical_sex_only_fam_gaussian.conservative.Rdata") # If loading from pre-saved file and not re-running
-
-# pp check
-pp_check(m.c.s.l, ndraws = 1000) 
-pp_check(m.c.s.l, type = "stat", stat = 'median', ndraws = 2000)
-pp_check(m.c.s.l, type = "stat", stat = 'mean', ndraws = 2000)
-
-# trace and density plots
-plot(m.c.s.l)
-
-# pairwise plots
-pairs(m.c.s.l)
-
-
-mcmc_plot(m.c.s.l)
-conditional_effects(m.c.s.l)
-
-```
-
-### Full dataset categorical nested models
-
-### Model selection
-
-```{r}
-# Print model summaries 
-sink(paste(getwd(),"/Tables/crane_mass_brms_model_summaries.txt", sep=""),append = TRUE)
-summary(m.c.n.l, waic=TRUE)
-summary(m.c.s.l, waic=TRUE)
-
-sink()
-# print(hct.test, prob=0.95) # change CI cut-off by adjusting prob; remember Bayesian default may not be 95%
-
-# Get model WAIC scores  
-m.c.n.waic <- waic(m.c.n.l)
-m.c.s.waic <- waic(m.c.s.l)
-
-
-#crane.waics <- cbind(m0.g.waic, m1.a.g.waic, m2.a.g.waic, m3.i.g.waic, m0.l.waic, m1.a.l.waic, m2.a.l.waic, m3.i.l.waic); crane.waics
-#write.csv(crane.waics, paste(getwd(),"/Tables/crane_brms_models_waics.csv", sep="")) # totally unintelligible cumbersome doc w/ all pointwise comparisons 
-
-
-#WAIC unreliable use LOOIC instead
-
- #leave one out cross-validation, lowest is "best"
-# if 2*standard error > delta LOOIC, models aren't necessarily distinguishable
-
-
-
-LOO(m.c.n.l, m.c.s.l, reloo=FALSE) 
-
-# Model comparisons:
-#         elpd_diff se_diff
-# m.c.s.l   0.0       0.0  
-# m.c.n.l -11.8       4.1  
- #Bayes R2
-bayes_R2(m.c.n.l) # 0.0000000000 nothing
-bayes_R2(m.c.s.l) #0.31
-
-
+p
+ggsave(p +theme(), filename = paste0(figures,"Lesser_cond_eff_mass-sex_conservative.pdf"), height = 4.6, width = 5.6, units = "in", device = cairo_pdf)
 
 ```
 
 ### Predicitons (top model)
-
+lessers
 ```{r}
 newdata <-dat.l%>%dplyr::select(sex, log_mass)%>%filter(!sex %in% c("UNKNOWN"))%>%droplevels()
 
-tidy_pred <- m.c.s.l %>% 
+tidy_pred <- lesser_mass_models[[3]][[2]] %>% 
   epred_draws(newdata = newdata )
 
-#get median value for males 
-tidy_mass_males <- tidy_pred%>%
-  filter(sex=="M")%>%
-  group_by(sex)
-
+#get median value for females 
 tidy_mass_females <- tidy_pred%>%
   filter(sex=="F")%>%
-  group_by(sex)%>%
-  sample_n(size=nrow(tidy_mass_males))
+  group_by(sex)
 
+#get median value for males and sample to equal females
+tidy_mass_males <- tidy_pred%>%
+  filter(sex=="M")%>%
+  group_by(sex)%>%
+  sample_n(size=nrow(tidy_mass_females))
 
 
 SDI.mass.pred.l.m <- (tidy_mass_males$.epred -tidy_mass_females$.epred)/tidy_mass_females$.epred
 
 
-mean(SDI.mass.epred.l.m)
+mean(SDI.mass.pred.l.m)
 ```
 
-### Null model greater
-
-```{r}
-#use this to get idea of priors then set your own!!
-# priors <-get_prior(log_mass ~ 1 + log_mtl  + sex,
-#                    data = dat.l, family = gaussian())
-
-hist(dat.g$log_mass)
-# stick with gaussian
-
-m.c.n.g <- brm(
-  formula = bf(log_mass ~ 1),
-  data = dat.g,
-  family = gaussian(),
-  cores = 4,
-  chains = 4,
-  thin = 10, #chop out transitions?
-  warmup = 10000, #half of iterations
-  iter = 20000,
-  prior = c(
-      prior(student_t(3, 2.8, 2.5), "Intercept"),
-       prior(student_t(3, 0, 2.5), "sigma")),
-  #prior = priors,
-  save_pars = save_pars(all = TRUE), #need this for loo comparison
-  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
-  set.seed(2020)
-)
-
-save(m.c.n.g, file=paste(getwd(), "/models/", "crane_mass_greater_catagorical_null_fam_gaussian.conservative.Rdata", sep="")) # save model
-
-#load("crane_mass_greater_catagorical_null_fam_gaussian.conservative.Rdata") # If loading from pre-saved file and not re-running
-
-# pp check
-pp_check(m.c.n.g, ndraws = 1000) 
-pp_check(m.c.n.g, type = "stat", stat = 'median', ndraws = 2000)
-pp_check(m.c.n.g, type = "stat", stat = 'mean', ndraws = 2000)
-
-# trace and density plots
-plot(m.c.n.g)
-
-# pairwise plots
-pairs(m.c.n.g)
-
-
-
-
-```
-
-### Sex only model
-
-```{r}
-#use this to get idea of priors then set your own!!
-# priors <-get_prior(log_mass ~ 1 + log_mtl  + sex,
-#                    data = dat.l, family = gaussian())
-
-m.c.s.g <- brm(
-  formula = bf(log_mass ~ 1 + sex, sigma ~sex),
-  data = dat.g,
-  family = gaussian(),
-  cores = 4,
-  chains = 4,
-  thin = 10, #chop out transitions?
-  warmup = 10000, #half of iterations
-  iter = 20000,
-  #prior = priors,
-  save_pars = save_pars(all = TRUE), #need this for loo comparison
-  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
-  set.seed(2020)
-)
-
-save(m.c.s.g, file=paste(getwd(), "/models/", "crane_mass_greater_catagorical_sex_only_fam_gaussian.conservative.Rdata", sep="")) # save model
-
-#load("crane_mass_greater_catagorical_sex_only_fam_gaussian.conservative.Rdata") # If loading from pre-saved file and not re-running
-
-# pp check
-pp_check(m.c.s.g, ndraws = 1000) 
-pp_check(m.c.s.g, type = "stat", stat = 'median', ndraws = 2000)
-pp_check(m.c.s.g, type = "stat", stat = 'mean', ndraws = 2000)
-
-# trace and density plots
-plot(m.c.s.g)
-
-# pairwise plots
-pairs(m.c.s.g)
-
-
-
-
-```
-
-### Model selection
-
-```{r}
-
-# Get model WAIC scores  
-waic(m.c.n.g)
-waic(m.c.s.g)
-
-
-#crane.waics <- cbind(m0.g.waic, m1.a.g.waic, m2.a.g.waic, m3.i.g.waic, m0.l.waic, m1.a.l.waic, m2.a.l.waic, m3.i.l.waic); crane.waics
-#write.csv(crane.waics, paste(getwd(),"/Tables/crane_brms_models_waics.csv", sep="")) # totally unintelligible cumbersome doc w/ all pointwise comparisons 
-
-
-#WAIC unreliable use LOOIC instead
-
- #leave one out cross-validation, lowest is "best"
-# if 2*standard error > delta LOOIC, models aren't necessarily distinguishable
-
-
-
-LOO(m.c.n.g, m.c.s.g, reloo=FALSE) 
-
-# Model comparisons:
-#         elpd_diff se_diff
-# m.c.s.g   0.0       0.0  
-# m.c.n.g -22.6       5.0   
-
- #Bayes R2
-bayes_R2(m.c.n.g) # 0.0000000000 nothing
-bayes_R2(m.c.s.g) #0.34
-
-
-
-```
 
 ### Predicitons (top model)
 
 ```{r}
 newdata <-dat.g%>%dplyr::select(sex, log_mass)%>%filter(!sex %in% c("UNKNOWN"))%>%droplevels()
 
-tidy_pred <- m.c.s.g %>% 
+tidy_pred <- greater_mass_models[[3]][[3]] %>% 
   epred_draws(newdata = newdata ) #change from exoected to posterior to get low or high spread. expected is mean from each posterior sample while posterior is just draw from posterior more like individual response, while expected is population response.
 
 
@@ -2553,22 +2352,22 @@ SDI.plot <- rbind(SDI.plot, SDI.m.plot)
 p<-ggplot(SDI.plot, aes(x=x,y=Taxon), colour = "grey43",
                   fill = "grey43")+
     stat_halfeye(alpha=0.5, point_alpha=0.8, interval_alpha=0.8)+
-    theme_classic(base_size = 14)+
     #scale_fill_manual(values=c("cadetblue", "darkorchid3"))+
   #scale_color_manual(values=c("cadetblue4", "darkorchid4"))+
     theme(legend.title = element_blank(),
         legend.position = c(0.82,0.2))+
-  scale_x_continuous(limits=c(-0.002, 0.03))+
+  scale_x_continuous(limits=c(-0.01, 0.03))+
     labs(x=expression(paste("SDI")), y="")+
   facet_wrap(.~cat)
 p
 
-ggsave(p, filename = paste(getwd(), "/figures/", "SDI_cat_faceted.conservative.pdf", sep=""), width=7, height=3.5)
+ggsave(p, filename = paste0(figures, "SDI_cat_faceted.conservative.pdf"), width=7, height=3.5, device=cairo_pdf)
+
 cohen.d(SDI.mass.pred.g.m, SDI.mass.pred.l.m)
 
 # d estimate: 0.09718702 (negligible)
 # 95 percent confidence interval:
-#      lower      upper 
+#      lower      upper
 # 0.08943497 0.10493906
 
 SDI_contrasts_plot <- data.frame(SDI.t = SDI.pred.l -SDI.pred.g,
@@ -2585,473 +2384,62 @@ p<-ggplot(SDI_contrasts_plot, aes(x=value,y=key, fill=key))+
     labs(x="contrasts SDI", y="")
 p
 
-ggsave(p, filename = paste(getwd(), "/figures/", "SDI_contrasts_grey.conservative.pdf", sep=""), width=6, height=5)
+ggsave(p, filename = paste(getwd(), "/figures/", "SDI_contrasts_grey.conservative.pdf", sep=""), width=6, height=5, device=cairo_pdf)
 
 
 ```
 
-Let's try and simulate data using bootstrapping and then loop through to find the intercept Chris describes (find minimum male measurement determine the difference between predicted values at these points.)
-
-```{r}
-iter <- 1000
-intercept_diff_g <- vector()
-intercept_diff_l <- vector()
-
-SDI_g <- vector()
-SDI_l <- vector()
-
-for(i in 1:iter){
-t.df <- dat.g%>%
-  dplyr::select(sex, log_mass, log_mtl)%>%
-  sample_n(., size=nrow(.), replace=T)
-#sim_df(., n=nrow(.), between="sex", empirical = T)%>% #This line simulates data
-
-t.lm  <- lm(log_mtl ~ log_mass + sex , data=t.df) #linear model to extract predictions
-
-t.min.m <- t.df%>%filter(sex=="M")%>%mutate(min.m = min(log_mass))
-
-t.min.m <- data.frame(t.min.m$min.m[1])
-colnames(t.min.m) <- "log_mass"
-t.min.m$sex <- "M"
-
-t.min.f <- data.frame(t.min.m[1])
-colnames(t.min.f) <- "log_mass"
-t.min.f$sex <- "F"
-  
-t.pred.m <- predict(t.lm, newdata= t.min.m)
-
-t.pred.f <- predict(t.lm, newdata= t.min.f)
-
-intercept_diff_g[i] <- t.pred.m-t.pred.f
-SDI_g[i] <- (t.pred.m-t.pred.f)/t.pred.f
-}
-
-for(i in 1:iter){
-t.df <- dat.l%>%
-  dplyr::select(sex, log_mass, log_mtl)%>%
-  sample_n(., size=nrow(.), replace=T)
-#sim_df(., n=nrow(.), between="sex", empirical = T)%>% #This line simulates data
-
-t.lm  <- lm(log_mtl ~ log_mass + sex , data=t.df) #linear model to extract predictions
-
-t.min.m <- t.df%>%filter(sex=="M")%>%mutate(min.m = min(log_mass))
-
-t.min.m <- data.frame(t.min.m$min.m[1])
-colnames(t.min.m) <- "log_mass"
-t.min.m$sex <- "M"
-
-t.min.f <- data.frame(t.min.m[1])
-colnames(t.min.f) <- "log_mass"
-t.min.f$sex <- "F"
-  
-t.pred.m <- predict(t.lm, newdata= t.min.m)
-
-t.pred.f <- predict(t.lm, newdata= t.min.f)
-
-intercept_diff_l[i] <- t.pred.m-t.pred.f
-SDI_l[i] <- (t.pred.m-t.pred.f)/t.pred.f
-
-}
-
-dens.g.int <- density(intercept_diff_g)
-dens.l.int <- density(intercept_diff_l)
-
-plot(dens.g.int, frame=F, col="darkorchid", lwd=2, ylim=c(0,60), xlim=c(-0.01, 0.09), main="", xlab="")
-lines(dens.l.int, col="steelblue", lwd=2)
-
-t.test(intercept_diff_g, intercept_diff_l)
-#very significant differences between these distributions
-
-#get SE for int diffs
-std.error(intercept_diff_g)
-std.error(intercept_diff_l)
-
-#effect size
-cohen.d(intercept_diff_g, intercept_diff_l)
-
-#very large likely much smaller 
-
-dens.g.sdi <- density(SDI_g)
-dens.l.sdi <- density(SDI_l)
-
-plot(dens.g.sdi, frame=F, col="darkorchid", lwd=2, ylim=c(0,130), xlim=c(-0.01, 0.04), main="", xlab="")
-lines(dens.l.sdi, col="steelblue", lwd=2)
-
-t.test(SDI_g, SDI_l)
-#very significant differences between these distributions
-std.error(SDI_g)
-std.error(SDI_l)
-
-# standard error
-
-#effect size
-cohen.d(SDI_g, SDI_l)
-
-#very large likely much smaller 
-
-samp.l.f <- list()
-samp.l.m <- list()
-
-iter <- 100
-for(i in 1:iter){
-  temp.f <- dat.l%>%filter(sex=="F")%>%sample_n(size=nrow(dat.l), replace=T)
-    temp.f$i <- i  # maybe you want to keep track of which iteration produced it?
-    samp.l.f[[i]] <- temp.f # add it to your list
-    
-    temp.m <- dat.l%>%filter(sex=="M")%>%sample_n(size=nrow(dat.l), replace=T)
-    temp.m$i <- i  # maybe you want to keep track of which iteration produced it?
-    samp.l.m[[i]] <- temp.m # add it to your list
-}
-
-samp.l.f<-do.call(rbind, samp.l.f)
-samp.l.m<-do.call(rbind, samp.l.m)
-
-samp.g.f <- list()
-samp.g.m <- list()
-
-iter <- 100
-for(i in 1:iter){
-  temp.f <- dat.g%>%filter(sex=="F")%>%sample_n(size=nrow(dat.g), replace=T)
-    temp.f$i <- i  # maybe you want to keep track of which iteration produced it?
-    samp.g.f[[i]] <- temp.f # add it to your list
-      temp.m <- dat.g%>%filter(sex=="M")%>%sample_n(size=nrow(dat.g), replace=T)
-    temp.m$i <- i  # maybe you want to keep track of which iteration produced it?
-    samp.g.m[[i]] <- temp.m # add it to your list
-}
-
-samp.g.f<-do.call(rbind, samp.g.f)
-samp.g.m<-do.call(rbind, samp.g.m)
-
-samp.both <- rbind(samp.l.f,samp.l.m, samp.g.f, samp.g.m)
+## PCA models
 
 
-    ggplot(samp.l.f, aes(x=log_mass, log_mtl, linetype=taxon_name, group=factor(i)))+
-    stat_smooth( geom= "line",size=0.5, color ="grey40", alpha=0.3, method="lm", se=T)+
-       stat_smooth(data=samp.l.m, geom= "line", color="grey80",size=0.5, alpha=0.3, method="lm", se=T)+
-      stat_smooth(data=samp.g.f, geom= "line", color="grey40",size=0.5, alpha=0.3, method="lm", se=T)+
-      stat_smooth(data=samp.g.m, geom= "line", color="grey80",size=0.5, alpha=0.3, method="lm", se=T)+
-      theme_classic(base_size = 14)+
-      labs(x="log10(mass)", y="log10(mean trachea length)")+
-      theme(legend.position = c(0.8,0.2),
-            legend.title = element_blank())
+```{r, `PCAmodels`}
 
- #Problem here is we are using combined sex lines this is not what we want
+source("functions/model_runners.R")
+
+pca.cols.to.add <-dat.s%>%
+  dplyr::select(4, 6,29, 12:17,31:33)%>%
+  na.omit()%>%
+  dplyr::select(1:3)
+
+pca.f<-dat.s%>%
+  dplyr::select(12:17,31:33)%>%
+  na.omit()%>%
+  prcomp(., center=T,
+         scale=T)
+
+print(pca.f)
+plot(pca.f, type = "l")
+summary(pca.f)
+predict(pca.f, 
+        newdata=tail(dat.s%>%
+  dplyr::select(12:17,31:33)%>%
+  na.omit(), 2))
+
+pca.data<- as.data.frame(pca.f$x)
+
+pca.data$species <- pca.cols.to.add$taxon_name.x
+pca.data$sex <- pca.cols.to.add$sex
+pca.data$mass <- pca.cols.to.add$mass
+pca.data$log_mass.z <- scale(log10(pca.cols.to.add$mass))
+
+
+#run models
+run_my_PC_models(data=pca.data, taxon = "Antigone canadensis tabida", name="greater_PC_models", seed=6)
+run_my_PC_models(pca.data, taxon = "Antigone canadensis canadensis",name="lesser_PC_models", seed=6)
+
+save(greater_PC_models, file=paste0(models, "greater_PC_models.Rdata"))
+save(lesser_PC_models, file=paste0(models, "lesser_PC_models.Rdata"))
+
+load(file=paste0(models, "greater_PC_models.Rdata"))
+load(file=paste0(models, "lesser_PC_models.Rdata"))
+
+
+
+
 
 ```
-
-#same thing but using faux library to make up datasets
-
-```{r}
-iter <- 1000
-intercept_diff_g <- vector()
-intercept_diff_l <- vector()
-
-SDI_g <- vector()
-SDI_l <- vector()
-
-for(i in 1:iter){
-t.df <- dat.g%>%
-  dplyr::select(sex, log_mass, log_mtl)%>%
-  sim_df(., n=nrow(dat.g), between="sex")
-#sim_df(., n=nrow(.), between="sex", empirical = T)%>% #This line simulates data
-
-t.lm  <- lm(log_mtl ~ log_mass + sex , data=t.df) #linear model to extract predictions
-
-t.min.m <- t.df%>%filter(sex=="M")%>%mutate(min.m = min(log_mass))
-
-t.min.m <- data.frame(t.min.m$min.m[1])
-colnames(t.min.m) <- "log_mass"
-t.min.m$sex <- "M"
-
-t.min.f <- data.frame(t.min.m[1])
-colnames(t.min.f) <- "log_mass"
-t.min.f$sex <- "F"
-  
-t.pred.m <- predict(t.lm, newdata= t.min.m)
-
-t.pred.f <- predict(t.lm, newdata= t.min.f)
-
-intercept_diff_g[i] <- t.pred.m-t.pred.f
-SDI_g[i] <- (t.pred.m-t.pred.f)/t.pred.f
-}
-
-for(i in 1:iter){
-t.df <- dat.l%>%
-  dplyr::select(sex, log_mass, log_mtl)%>%
-  sim_df(., n=nrow(dat.l), between="sex")
-#sim_df(., n=nrow(.), between="sex", empirical = T)%>% #This line simulates data
-
-t.lm  <- lm(log_mtl ~ log_mass + sex , data=t.df) #linear model to extract predictions
-
-t.min.m <- t.df%>%filter(sex=="M")%>%mutate(min.m = min(log_mass))
-
-t.min.m <- data.frame(t.min.m$min.m[1])
-colnames(t.min.m) <- "log_mass"
-t.min.m$sex <- "M"
-
-t.min.f <- data.frame(t.min.m[1])
-colnames(t.min.f) <- "log_mass"
-t.min.f$sex <- "F"
-  
-t.pred.m <- predict(t.lm, newdata= t.min.m)
-
-t.pred.f <- predict(t.lm, newdata= t.min.f)
-
-intercept_diff_l[i] <- t.pred.m-t.pred.f
-SDI_l[i] <- (t.pred.m-t.pred.f)/t.pred.f
-
-}
-
-dens.g.int <- density(intercept_diff_g)
-dens.l.int <- density(intercept_diff_l)
-
-plot(dens.g.int, frame=F, col="darkorchid", lwd=2, ylim=c(0,80), xlim=c(-0.01, 0.09), main="", xlab="")
-lines(dens.l.int, col="steelblue", lwd=2)
-
-t.test(intercept_diff_g, intercept_diff_l)
-#very significant differences between these distributions
-
-std.error(intercept_diff_g)
-std.error(intercept_diff_l)
-
-#effect size
-cohen.d(intercept_diff_g, intercept_diff_l)
-
-#very large likely much smaller 
-
-dens.g.sdi <- density(SDI_g)
-dens.l.sdi <- density(SDI_l)
-
-plot(dens.g.sdi, frame=F, col="darkorchid", lwd=2, ylim=c(0,200), xlim=c(-0.01, 0.04), main="", xlab="")
-lines(dens.l.sdi, col="steelblue", lwd=2)
-
-t.test(SDI_g, SDI_l)
-#very significant differences between these distributions
-
-std.error(SDI_g)
-std.error(SDI_l)
-
-#effect size
-cohen.d(SDI_g, SDI_l)
-
-#very large likely much smaller 
-
-samp.l.f <- list()
-samp.l.m <- list()
-
-iter <- 100
-for(i in 1:iter){
-  temp.f <- dat.l%>%filter(sex=="F")%>%dplyr::select(log_mtl, log_mass)%>%sim_df(.)
-    temp.f$i <- i  # maybe you want to keep track of which iteration produced it?
-    samp.l.f[[i]] <- temp.f # add it to your list
-    
-   temp.m <- dat.l%>%filter(sex=="M")%>%dplyr::select(log_mtl, log_mass)%>%sim_df(.)
-    temp.m$i <- i  # maybe you want to keep track of which iteration produced it?
-    samp.l.m[[i]] <- temp.m # add it to your list
-}
-
-samp.l.f<-do.call(rbind, samp.l.f)
-samp.l.m<-do.call(rbind, samp.l.m)
-
-samp.l.f$taxon_name <- factor("Antigone canadensis canadensis")
-samp.l.m$taxon_name <- factor("Antigone canadensis canadensis")
-
-samp.g.f <- list()
-samp.g.m <- list()
-
-iter <- 100
-for(i in 1:iter){
-  temp.f <- dat.g%>%filter(sex=="F")%>%dplyr::select(log_mtl, log_mass)%>%sim_df(.)
-    temp.f$i <- i  # maybe you want to keep track of which iteration produced it?
-    samp.g.f[[i]] <- temp.f # add it to your list
-      temp.m <- dat.g%>%filter(sex=="M")%>%dplyr::select(log_mtl, log_mass)%>%sim_df(.)
-    temp.m$i <- i  # maybe you want to keep track of which iteration produced it?
-    samp.g.m[[i]] <- temp.m # add it to your list
-}
-
-samp.g.f<-do.call(rbind, samp.g.f)
-samp.g.m<-do.call(rbind, samp.g.m)
-
-samp.g.f$taxon_name <- factor("Antigone canadensis tabida")
-samp.g.m$taxon_name <- factor("Antigone canadensis tabida")
-
-samp.both <- rbind(samp.l.f,samp.l.m, samp.g.f, samp.g.m)
-
-
-p <-ggplot(samp.l.f, aes(x=log_mass, log_mtl, linetype=taxon_name, group=factor(i)))+
-    stat_smooth( geom= "line",size=0.5, color ="grey40", alpha=0.3, method="lm", se=T)+
-       stat_smooth(data=samp.l.m, geom= "line", color="grey80",size=0.5, alpha=0.3, method="lm", se=T)+
-      stat_smooth(data=samp.g.f, geom= "line", color="grey40",size=0.5, alpha=0.3, method="lm", se=T)+
-      stat_smooth(data=samp.g.m, geom= "line", color="grey80",size=0.5, alpha=0.3, method="lm", se=T)+
-      theme_classic(base_size = 14)+
-      labs(x="log10(mass)", y="log10(mean trachea length)")+
-      theme(legend.position = c(0.3,0.85),
-            legend.title = element_blank())
-ggsave(p, filename= paste(figures,"lm_replicates_with_faux_simulated_datasets.conservative.pdf", sep=""), device="pdf", bg = "transparent", height = 4, width = 6, units = "in")
-
-
-```
-
-#same thing using bayesian models (faux data simulation)
-
-```{r}
-iter <- 100
-
-
-#mods.l <- vector("list", length = iter) #saving each model uses too much memory
-#mods.g <- vector("list", length = iter)
-
-intercept_diff_g_bm <- vector()
-intercept_diff_l_bm <- vector()
-
-
-SDI_g_bm <- vector()
-SDI_l_bm <- vector()
-
-
-brms.g.sim <- list(intercept_diff_g_bm, SDI_g_bm)
-
-brms.l.sim <- list( intercept_diff_l_bm, SDI_l_bm)
-
-
-for(i in 1:iter){
-t.df <- dat.g%>%
-  dplyr::select(sex, log_mass, log_mtl)%>%
-  sim_df(., n=nrow(.), between="sex", empirical = T) #This line simulates data
-t.bm <- brm(
-  formula = bf(log_mtl ~ 1 + log_mass + sex ),
-  data = t.df,
-  family = gaussian(),
-  cores = 4,
-  chains = 4,
-  thin = 10, #chop out transitions?
-  warmup = 10000, #half of iterations
-  iter = 20000,
-  prior = c(
-       prior(normal(0, 10), "Intercept"),
-       prior(cauchy(0, 2.5), "sigma"),
-       prior(student_t(7, 0, 2.5), class = "b" )),
-  #prior = priors,
-  save_pars = save_pars(all = TRUE), #need this for loo comparison
-  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
-  set.seed(2020)
-)
-
-#brms.g.sim[[1]][[i]] <- t.bm
-
-newdata <- data.frame(sex = factor(c("M", "F")),
-                      log_mass = c(min(t.df$log_mass), min(t.df$log_mass)))
-
-temp.pred <- predict(t.bm, newdata = newdata)
-
-brms.g.sim[[1]][i] <- temp.pred[1,1]-temp.pred[2,1]
-brms.g.sim[[2]][i] <- (temp.pred[1,1]-temp.pred[2,1])/temp.pred[2,1]
-
-#   plot <-t.df %>%
-#   group_by(sex) %>%
-#   droplevels()%>% #drop unused but present unknown level
-#   data_grid(log_mass = seq_range(log_mass, n = nrow(t.df))) %>%
-#   add_epred_draws(t.bm) #this is huge so need to sample, no longer dataframe so do it separately on next line
-# plot.pred.g[[i]] <- plot[sample(nrow(plot), 1000), c(1,2, 7)]
-
-print(paste("Iteration:", i, "complete.", sep=" "))
-}
-
-for(i in 1:iter){
-t.df <- dat.l%>%
-  dplyr::select(sex, log_mass, log_mtl)%>%
-  #sample_n(., size=nrow(.), replace=T)
-  sim_df(., n=nrow(.), between="sex", empirical = T) #This line simulates data
-t.bm <- brm(
-  formula = bf(log_mtl ~ 1 + log_mass + sex), #using additive model because it is simpler and both lesser and greaters scored equvalent with LOOIC
-  data = t.df,
-  family = gaussian(),
-  cores = 4,
-  chains = 4,
-  thin = 10, 
-  warmup = 10000, #half of iterations
-  iter = 20000,
-  prior = c(
-       prior(normal(0, 10), "Intercept"),
-       prior(cauchy(0, 2.5), "sigma"),
-       prior(student_t(7, 0, 2.5), class = "b" )),
-  #prior = priors,
-  save_pars = save_pars(all = TRUE), #need this for loo comparison
-  control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
-  set.seed(2020)
-)
-
-#brms.l.sim[[1]][[i]] <- t.bm
-
-newdata <- data.frame(sex = factor(c("M", "F")),
-                      log_mass = c(min(t.df$log_mass), min(t.df$log_mass)))
-
-temp.pred <- predict(t.bm, newdata = newdata)
-
-
-brms.l.sim[[1]][i] <- temp.pred[1,1]-temp.pred[2,1]
-brms.l.sim[[2]][i] <- (temp.pred[1,1]-temp.pred[2,1])/temp.pred[2,1]
-
-
-
-# plot <-t.df %>%
-#   group_by(sex) %>%
-#   droplevels()%>% #drop unused but present unknown level
-#   data_grid(log_mass = seq_range(log_mass, n = nrow(t.df))) %>%
-#   add_epred_draws(t.bm) #this is huge so need to sample, no longer dataframe so do it separately on next line
-# plot.pred.l[[i]] <- plot[sample(nrow(plot), 1000), c(1,2, 7)]
-
-print(paste("Iteration:", i, "complete.", sep=" "))
-}
-
-
-#Save the model output so you don't have to spend your entire fucking life running them
-saveRDS(brms.g.sim, file=paste(results, "/brms.g.sim.RDS", sep=""))
-readRDS(file=paste(results, "/brms.g.sim.RDS", sep=""))
-
-saveRDS(brms.l.sim, file=paste(results, "/brms.l.sim.RDS", sep=""))
-readRDS(file=paste(results, "/brms.L.sim.RDS", sep=""))
-
-
-#make into dataframe for plotting
-bm.g.ggplot <- as.data.frame(brms.g.sim[[2]])
-colnames(bm.g.ggplot) <- "SDI"
-bm.g.ggplot$subspecies <- factor("Antigone canadensis tabida")
-bm.l.ggplot <- as.data.frame(brms.l.sim[[2]])
-colnames(bm.l.ggplot) <- "SDI"
-bm.l.ggplot$subspecies <- factor("Antigone canadensis canadensis")
-
-bm.ggplot <- rbind(bm.g.ggplot, bm.l.ggplot)
-
-ggplot(bm.ggplot, aes(x=subspecies, y=SDI, fill=subspecies))+
-  #geom_violin()+
-  geom_line() +
-     stat_summary(fun = "median", geom = "point", size = 1)+
-  theme_classic(base_size = 16)+
-  coord_cartesian(ylim=c(0,0.025))+
-  labs(x="")+
-  theme(legend.position = "none")
-
-t.test(brms.l.sim[[1]], brms.g.sim[[1]])
-std.error(brms.g.sim[[1]])
-std.error(brms.l.sim[[1]])
-
-t.test(brms.l.sim[[2]], brms.g.sim[[2]])
-std.error(brms.g.sim[[2]])
-std.error(brms.l.sim[[2]])
-
-#very significant differences between these distributions
-
-#effect size
-cohen.d(brms.l.sim[[1]], brms.g.sim[[1]])
-cohen.d(brms.l.sim[[2]], brms.g.sim[[2]])
-#very large likely much smaller 
-
-```
-
 ### Bayesian predictions trachea length \~ mass
 
-```{r}
     
 plot.l<-dat.l %>%
   group_by(sex) %>%
