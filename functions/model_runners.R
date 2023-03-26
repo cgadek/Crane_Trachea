@@ -3,19 +3,14 @@
 run_my_mtl_models <- function(data, name, seed) {
   require(tidyverse)
   require(brms)
-  require(future)
-  
-  plan(list(
-    tweak(multisession, workers = 2),
-    tweak(multisession, workers = 2)
-  ))
+
   if (is.null(seed))
     seed <- NA
   
   f1 <- brm(
     formula = bf(log_mtl ~ 1),
     data = data,
-    family = skew_normal(),
+    family = student(link="identity"),
     cores = 4,
     chains = 4,
     thin = 10,
@@ -35,7 +30,7 @@ run_my_mtl_models <- function(data, name, seed) {
   f2 <- brm(
     formula = bf(log_mtl ~ 1 + log_mass.z),
     data = data,
-    family = skew_normal(),
+    family = student(link="identity"),
     cores = 4,
     chains = 4,
     thin = 10,
@@ -61,7 +56,7 @@ run_my_mtl_models <- function(data, name, seed) {
   f3 <- brm(
     formula = bf(log_mtl ~ 1 + sex, sigma ~ sex),
     data = data,
-    family = skew_normal(),
+    family = student(link="identity"),
     cores = 4,
     chains = 4,
     thin = 10,
@@ -85,7 +80,7 @@ run_my_mtl_models <- function(data, name, seed) {
   f4 <- brm(
     formula = bf(log_mtl ~ 1 + log_mass.z + sex, sigma ~ sex),
     data = data,
-    family = skew_normal(),
+    family = student(link="identity"),
     cores = 4,
     chains = 4,
     thin = 10,
@@ -107,7 +102,7 @@ run_my_mtl_models <- function(data, name, seed) {
   f5 <- brm(
     formula = bf(log_mtl ~ 1 + log_mass.z + sex + log_mass.z * sex, sigma ~ sex),
     data = data,
-    family = skew_normal(),
+    family = student(link="identity"),
     cores = 4,
     chains = 4,
     thin = 10,
@@ -151,19 +146,14 @@ run_my_mtl_models <- function(data, name, seed) {
 run_my_mass_models <- function(data, name, seed) {
   require(tidyverse)
   require(brms)
-  require(future)
-  
-  plan(list(
-    tweak(multisession, workers = 2),
-    tweak(multisession, workers = 2)
-  ))
+
   if (is.null(seed))
     seed <- NA
   
   f1 <- brm(
     formula = bf(log_mass ~ 1),
     data = data,
-    family = skew_normal(),
+    family = student(link="identity"),
     cores = 4,
     chains = 4,
     thin = 10, #chop out transitions?
@@ -181,7 +171,7 @@ run_my_mass_models <- function(data, name, seed) {
   f2 <- brm(
     formula = bf(log_mass ~ 1 + sex, sigma ~ sex),
     data = data,
-    family = skew_normal(),
+    family = student(link="identity"),
     cores = 4,
     chains = 4,
     thin = 10, #chop out transitions?
@@ -199,7 +189,7 @@ run_my_mass_models <- function(data, name, seed) {
   f3 <-brm(
     formula = bf(log_mass ~ 1 + sex, sigma ~ sex),
     data = data,
-    family = skew_normal(),
+    family = student(link="identity"),
     cores = 4,
     chains = 4,
     thin = 10, #chop out transitions?
@@ -231,22 +221,24 @@ run_my_mass_models <- function(data, name, seed) {
 }
 
 
-run_my_PC_models <- function(data, name, seed) {
+run_my_PC_models <- function(data, taxon, name, seed) {
   require(tidyverse)
   require(brms)
-  require(future)
-  
-  plan(list(
-    tweak(multisession, workers = 2),
-    tweak(multisession, workers = 2)
-  ))
+
   if (is.null(seed))
     seed <- NA
+  if(taxon =="Antigone canadensis canadensis"){
+    data <- data%>%
+    filter(species == "Antigone canadensis canadensis")
+  }else if(taxon =="Antigone canadensis tabida"){
+    data <- data%>%
+      filter(species == "Antigone canadensis tabida")
+    }
   
   f1 <- brm(
     formula = bf(PC1 ~ 1),
     data = data,
-    family = student(),
+    family = student(link="identity"),
     cores = 4,
     chains = 4,
     thin = 10, #chop out transitions?
@@ -264,7 +256,7 @@ run_my_PC_models <- function(data, name, seed) {
   f2 <- brm(
     formula = bf(PC1 ~ 1 + log_mass.z),
     data = data,
-    family = student(),
+    family = student(link="identity"),
     cores = 4,
     chains = 4,
     thin = 10, #chop out transitions?
@@ -283,7 +275,7 @@ run_my_PC_models <- function(data, name, seed) {
   f3 <-brm(
     formula = bf(PC1 ~ 1 + sex, sigma ~ sex),
     data = data,
-    family = student(),
+    family = student(link="identity"),
     cores = 4,
     chains = 4,
     thin = 10, #chop out transitions?
@@ -301,7 +293,7 @@ run_my_PC_models <- function(data, name, seed) {
   f4 <-brm(
     formula = bf(PC1 ~ 1 + log_mass.z + sex, sigma ~ sex),
     data = data,
-    family = student(),
+    family = student(link="identity"),
     cores = 4,
     chains = 4,
     thin = 10, #chop out transitions?
@@ -319,7 +311,7 @@ run_my_PC_models <- function(data, name, seed) {
   f5 <-brm(
     formula = bf(PC1 ~ 1 + log_mass.z + sex + log_mass.z * sex, sigma ~ sex),
     data = data,
-    family = student(),
+    family = student(link="identity"),
     cores = 4,
     chains = 4,
     thin = 10, #chop out transitions?
@@ -343,7 +335,125 @@ run_my_PC_models <- function(data, name, seed) {
   br3<-bayes_R2(f3)
   br4<-bayes_R2(f4)
   br5<-bayes_R2(f5)
-  br2L <- list(br1, br2, br3, br4, f5)
+  br2L <- list(br1, br2, br3, br4, br5)
+  
+  t <- tibble(dataset = c(rep(name,times=5),"LOO_comp", "BayesR2"),
+              model_set = c(1:5, "model_compare", "BayesR2"),
+              m = list(f1, f2, f3, f4, f5, m.comp, br2L))
+  
+  assign(name, t, envir=globalenv())
+}
+
+run_my_residual_models <- function(data, name, seed) {
+  require(tidyverse)
+  require(brms)
+  
+  if (is.null(seed))
+    seed <- NA
+  
+  f1 <- brm(
+    formula = bf(segment_width ~ 1),
+    data = data,
+    family = lognormal(),
+    cores = 4,
+    chains = 4,
+    thin = 10, #chop out transitions?
+    warmup = 10000, #half of iterations
+    iter = 20000,
+    prior = c(
+      prior(student_t(3, 0, 2.5), "Intercept"),
+      prior(student_t(3, 0, 2.5), "sigma")
+    ),
+    #prior = priors,
+    save_pars = save_pars(all = TRUE), #need this for loo comparison
+    control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+    seed = seed
+  )
+  f2 <- brm(
+    formula = bf(segment_width ~ 1 + r),
+    data = data,
+    family = lognormal(),
+    cores = 4,
+    chains = 4,
+    thin = 10, #chop out transitions?
+    warmup = 10000, #half of iterations
+    iter = 20000,
+    prior = c(
+      prior(student_t(3, 0, 2.5), "Intercept"),
+      prior(student_t(3, 0, 2.5), "sigma"),
+      prior(normal(0, 5), class = "b")
+    ),
+    save_pars = save_pars(all = TRUE), #need this for loo comparison
+    control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+    seed = seed
+  )
+  
+  f3 <-brm(
+    formula = bf(segment_width ~ 1 + sex, sigma ~ sex),
+    data = data,
+    family = lognormal(),
+    cores = 4,
+    chains = 4,
+    thin = 10, #chop out transitions?
+    warmup = 10000, #half of iterations
+    iter = 20000,
+    prior = c(
+      prior(student_t(3, 0, 2.5), "Intercept"),
+      prior(normal(0, 5), class = "b")
+    ),
+    save_pars = save_pars(all = TRUE), #need this for loo comparison
+    control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+    seed = seed
+  )
+  
+  f4 <-brm(
+    formula = bf(segment_width ~ 1 + r + sex, sigma ~ sex),
+    data = data,
+    family = lognormal(),
+    cores = 4,
+    chains = 4,
+    thin = 10, #chop out transitions?
+    warmup = 10000, #half of iterations
+    iter = 20000,
+    prior = c(
+      prior(student_t(3, 0, 2.5), "Intercept"),
+      prior(normal(0, 5), class = "b")
+    ),
+    save_pars = save_pars(all = TRUE), #need this for loo comparison
+    control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+    seed = seed
+  )
+  
+  f5 <-brm(
+    formula = bf(segment_width ~ 1 + r + sex + r * sex, sigma ~ sex),
+    data = data,
+    family = lognormal(),
+    cores = 4,
+    chains = 4,
+    thin = 10, #chop out transitions?
+    warmup = 5000, #half of iterations
+    iter = 10000,
+    prior = c(
+      prior(student_t(3, 0, 2.5), "Intercept"),
+      prior(normal(0, 5), class = "b")
+    ),
+    save_pars = save_pars(all = TRUE), #need this for loo comparison
+    control = list(adapt_delta = 0.97, max_treedepth = 19), #adapt_delta the target average proposal acceptance probability during Stan's adaptation period
+    seed = seed
+  )
+  
+
+  
+  #compare wil LOOIC
+  m.comp<-LOO(f1, f2, f3, f4, f5, moment_match=T)
+  
+  #Get Bayes R^2
+  br1<-bayes_R2(f1)
+  br2<-bayes_R2(f2)
+  br3<-bayes_R2(f3)
+  br4<-bayes_R2(f4)
+  br5<-bayes_R2(f5)
+  br2L <- list(br1, br2, br3, br4, br5)
   
   t <- tibble(dataset = c(rep(name,times=5),"LOO_comp", "BayesR2"),
               model_set = c(1:5, "model_compare", "BayesR2"),

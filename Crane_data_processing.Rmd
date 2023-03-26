@@ -1,0 +1,633 @@
+---
+title: "Crane_trachea Data Wrangling"
+author: "Chauncey Gadek and Trinity Casaus" 
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    toc: true
+    number_sections: true
+    toc_depth: 5
+    code_folding: show
+    #df_print: paged
+    #df_print: kable
+    #toc_float: true
+      #collapsed: false
+      #smooth_scroll: TRUE
+    theme: cosmo #spacelab #yeti #united #cosmo
+    highlight: tango
+  pdf_document:
+    df_print: kable
+fontsize: 12pt
+geometry: margin=0.25in
+always_allow_html: yes
+editor_options: 
+  chunk_output_type: console
+---
+
+```{=html}
+<style>
+/* HTML FORMATTING */
+h1, .h1, h2, .h2, h3, .h3, h4, .h4, h5, .h5 {
+  margin-top: 25px; /* space before each header */
+  font-weight: bold; /* bold headers */
+}
+</style>
+```
+```{R, echo=FALSE}
+# I set some GLOBAL R chunk options here.
+#   (to hide this message add "echo=FALSE" to the code chunk options)
+#rm(list =ls (all = TRUE)) #This removes objects from global environ
+knitr::opts_chunk$set(echo=F, comment = NA, message = FALSE, warning = FALSE, width = 100)
+knitr::opts_chunk$set(fig.align = "center", fig.height = 4, fig.width = 6)
+
+```
+
+# Load Packages
+
+```{R}
+pacman::p_load(
+AMR,
+devtools,
+magrittr,
+ggpubr,
+reshape,
+reshape2,
+performance,
+plyr,
+robustHD,
+dplyr,
+tidyr,
+tidyverse,
+tibble,
+car,
+rcompanion,
+GGally,
+Hmisc,
+gridExtra,
+stats,
+gplots,
+ggplot2,
+ggExtra,
+cowplot,
+colorspace,
+stats4, # Forces knitr to work when it's being wonky
+PMCMR, #Allows Kruskal-Wallis post-hocs
+effects,
+gridExtra,
+lattice,
+survival,
+fmsb,
+faraway,
+ape,
+#wBoot,
+ggridges,
+boot,
+effsize,
+plotrix,
+colorspace,
+patchwork,
+ggdist,
+# Mapping 
+raster,
+sp,
+rgdal,
+broom,
+stargazer, # model output tables
+ggeffects, # for estimating model predictions from mixed effects models
+hexbin,
+ggExtra,
+rgl,
+extrafont,
+readxl)
+
+#Load in functions
+source("~/Desktop/R_color_palettes/Gadek_custom_colors.R")
+source("~/Desktop/ggplot_themes/ggplot_themes.R")
+
+theme_set(theme_arial_clean())
+
+#setup folder paths for less coding
+figures <- paste(getwd(), "/figures/", sep="")
+tables <- paste(getwd(), "/Tables/", sep="")
+models <- paste(getwd(), "/models/", sep="")
+results <- paste(getwd(), "/models/results/", sep="")
+
+```
+# Data Processing
+
+```{R}
+
+dat.f <-
+  read_csv("~/Dropbox/Crane_trachea/data/Crane_Trachea.csv")
+
+dat.morpho <-
+  read_csv("~/Dropbox/Crane_trachea/crane_morpho.csv")
+#NOTE on dataset: on 2/23/21 Chauncey added all Jones & Witt 2014 cranes available from ARCTOS. Very few subspecies were designated so used preliminary cutoff of <4000g mass to assign to lesser subspecies. Outlier analysis should be done to assess this threshold. Also note that I assigned Y/N to bursa based on sex determination. I know this is bad but I'm in hurry and bursa is not reported consistently. If we want to do more fine-scale age analyses will need to revisit these data labeled 2009 in year_sampled column.
+
+
+morpho_big <- read.csv("data/morpho_large.csv", header = T)
+
+morpho_big <- morpho_big %>%
+  rename(taxon.name = taxon_name,
+         posterior.culmen = posterior_culmen) %>%
+  mutate(data.origin = "MSB")
+
+
+morpho_massive <-
+  read_excel("data/Crane_harvest_data-WORKING_COPY.xls")
+
+morpho_massive <- morpho_massive %>%
+  dplyr::select(
+    County,
+    Date,
+    Subspecies,
+    Weight,
+    Sex,
+    Tail,
+    `Wing Chord`,
+    `Anterior Culmen`,
+    `Posterior Culmen`,
+    Tarsus,
+    Age,
+    `Trachea length`,
+    `Trachea diameter`,
+  ) %>%
+  filter(County %in% c("SOCORRO", "VALENCIA", "Socorro- 2", "2", "3")) %>%
+  rename(
+    mean_trachea_length = `Trachea length`,
+    mass = Weight,
+    trachea.diameter = `Trachea diameter`,
+    anterior.culmen = `Anterior Culmen`,
+    posterior.culmen = `Posterior Culmen`,
+    wing.chord = `Wing Chord`,
+    taxon.name = Subspecies,
+    tail = Tail,
+    tarsus = Tarsus,
+    sex = Sex
+  ) %>%
+  mutate(
+    Date = as.Date(Date, tryFormats = c("%d-%m-%Y", "%m/%d/%Y")),
+    sample_year = year(Date),
+    taxon.name = ifelse(
+      taxon.name == "Canadensis",
+      "Antigone canadensis canadensis",
+      if_else(
+        taxon.name == "TABIDA",
+        "Antigone canadensis tabida",
+        if_else(
+          taxon.name == "CANADENSIS",
+          "Antigone canadensis canadensis",
+          ifelse(
+            taxon.name == "Tabida",
+            "Antigone canadensis tabida",
+            if_else(
+              taxon.name == "Immature Lesser",
+              "Antigone canadensis canadensis",
+              taxon.name
+            )
+          )
+        )
+      )
+    ),
+    sex = if_else(sex == "MALE", "M", if_else(
+      sex == "m", "M", if_else(sex == "FEMALE", "F", if_else(sex == "f", "F", sex))
+    )),
+    data.origin = "NMDGF"
+  ) %>%
+  bind_rows(., morpho_big)%>%
+  rename(
+    taxon_name = taxon.name)
+
+morpho_big_trach <- morpho_massive %>%
+  filter(!is.na(mean_trachea_length))
+
+
+#append the morpho data
+dat.f <- dat.f %>%
+  left_join(., morpho_big, by = "NK", keep = F)
+
+#make new variables
+dat.f <- dat.f %>%
+  mutate_if(sapply(dat.f, is.character), as.factor) %>%
+  mutate(
+    data.origin = "MSB",
+    #taxon_name = taxon_name.x,
+    mass = as.numeric(as.character(mass.x)),
+    segment_count1 = ifelse(segment_count1 > 350, NA, segment_count1),
+    segment_count2 = ifelse(segment_count2 > 350, NA, segment_count2),
+    width_1st_curve = as.numeric(as.character(`width _1st_curve`)),
+    width_1st_curve = ifelse(width_1st_curve < 8, NA, width_1st_curve),
+    tarsus = ifelse(tarsus < 150, NA, tarsus),
+    tail = ifelse(tail < 118, NA, tail),
+    mass = ifelse(
+      taxon_name == "Antigone canadensis tabida" &
+        sex == "F" &
+        mass < 4000,
+      NA,
+      mass
+    ),
+    mean_trachea_length = rowMeans(subset(
+      dat.f, select = c(length_mm_1, length_mm_2, length_mm_3)
+    ), na.rm = TRUE),
+    width_1st_curve = as.numeric(width_1st_curve),
+    segment_count_mean = rowMeans(subset(
+      dat.f,
+      select = c(segment_count1, segment_count2),
+      na.rm = T
+    ))
+  ) %>%
+  bind_rows(.,morpho_big_trach) %>%
+  mutate(
+    segment_width  = mean_trachea_length / segment_count2,
+    prop_trachea = mean_trachea_length / mass,
+    #make variable that controls trachea length by the mass of each bird
+    log_mass = log10(mass),
+    segment_count_mean = ifelse(segment_count_mean > 350, NA, segment_count_mean),
+    mass13 = mass ^ (1 / 3),
+    log_mtl = log10(mean_trachea_length),
+    uncertain_sex = factor(uncertain_sex),
+    wing.chord = ifelse(wing.chord == 160, NA, wing.chord),
+    sus = ifelse(
+      taxon_name == "Antigone canadensis tabida" &
+        sex == "M" &
+        mass < 4500 | taxon_name == "Antigone canadensis tabida" &
+        sex == "M" &
+        mean_trachea_length < 650 | taxon_name == "Antigone canadensis tabida" &
+        sex == "F" &
+        mass < 4000 |
+        # taxon_name == "Antigone canadensis canadensis" &
+        # mass < 2500 |
+        # taxon_name == "Antigone canadensis canadensis" &
+        # mass < 3000  & sex == "M"
+        taxon_name == "Antigone canadensis canadensis" &
+        mass > 4200 |
+        taxon_name == "Antigone canadensis canadensis" &
+        mass < 2500|
+      taxon_name == "Antigone canadensis canadensis" &
+        bursa == "Y" & mean_trachea_length <550,
+      "sus",
+      "chill"
+    ),
+    BMI.tars = (mass / (tarsus) ^ 2) * 105,
+    BMI.trach = (mass / (mean_trachea_length ^ 2) * 105),
+    BMI.wing = (mass / (wing.chord ^ 2) * 105),
+    NK = if_else(is.na(NK), sample(40000:50000, n(), replace = FALSE), NK)
+  ) %>%
+  filter(taxon_name %in% c("Antigone canadensis tabida", "Antigone canadensis canadensis"))%>%
+  dplyr::select(-mass.x, -`width _1st_curve`, -mass.y)
+
+```
+
+```{r `pruneSusPoints`}
+dat.s <- dat.f %>% filter(sus == "chill",
+                          sex %in% c("M", "F"))  #remove female greaters less than 4000 just one remove by NK and lesser over 4500
+
+#after exploration below uncertain sex doesn't help much but removes some uncertainty. for lessers most uncertain points fall within "cloud" of same sex. However bursa shows several very small males  (mass <3250) falling out with females. Removing these
+
+```
+
+### Cooks distance function
+
+Lets' see how a cooks distance filter changes our dataframe
+
+```{r}
+
+cooks_dist <- function(dataframe, column){
+  dataframe <- as.data.frame(dataframe)
+  dataframe <- dataframe[, sapply(dataframe, is.numeric)]
+  mod <- lm(dataframe[, 5] ~ 1, data = dataframe)
+  cooksd <- cooks.distance(mod)
+  influential <- as.numeric(names(cooksd)[(cooksd > 4 * mean(cooksd, na.rm = TRUE))])
+  final <- dataframe[-influential, ]
+  return(final)
+}
+
+
+cd <- cooks_dist(dat.s, 4)
+
+dat.s <- dat.s%>%
+  dplyr::select(NK, taxon_name, sex, bursa, data.origin)%>%
+  left_join(cd,.)
+
+```
+Only removes 3 points I can live with that!
+
+```{r}
+
+#Create a subset of young birds
+dat.baby <- dat.s %>% filter(dat.s$bursa == "Y")
+
+#subset by taxon
+
+dat.l <- dat.s %>%
+  filter(dat.s$taxon_name ==  "Antigone canadensis canadensis")
+
+dat.g <- dat.s %>%
+  filter(dat.s$taxon_name != "Antigone canadensis canadensis")
+
+
+#First scale some predictors.
+dat.g$log_mass.z <- scale(dat.g$log_mass)
+dat.g$mass13.z <- scale(dat.g$mass13)
+dat.g$segment_count.z <- scale(dat.g$segment_count_mean)
+dat.g$segment_width.z <- scale(dat.g$segment_width)
+dat.g$prop_trachea.z <- scale(dat.g$prop_trachea)
+
+
+#First scale some predictors.
+dat.l$log_mass.z <- scale(dat.l$log_mass)
+dat.l$mass13.z <- scale(dat.l$mass13)
+dat.l$segment_count.z <- scale(dat.l$segment_count_mean)
+dat.l$segment_width.z <- scale(dat.l$segment_width)
+dat.l$prop_trachea.z <- scale(dat.l$prop_trachea)
+
+#residuals
+
+r <- dat.l %>%
+  filter(!is.na(log_mtl)) %>%
+  group_by(taxon_name, sex)
+r <- lm(log_mtl ~ log_mass, data = r)
+r <- r$residuals
+df.r <- cbind(dat.l %>%
+             filter(!is.na(log_mtl)) %>% dplyr::select(NK), r)
+
+dat.l <- dat.l %>%
+  left_join(., df.r, by = "NK") %>%
+  distinct()
+
+r <- dat.g %>%
+  filter(!is.na(log_mtl),
+         !is.na(log_mass)) %>%
+  group_by(taxon_name, sex)
+r <- lm(log_mtl ~ log_mass, data = r)
+r <- r$residuals
+df.r2 <- cbind(dat.g %>%
+             filter(!is.na(log_mtl), !is.na(mass)) %>% dplyr::select(NK), r)
+
+dat.g <- dat.g %>%
+  left_join(., df.r2, by = "NK") %>%
+  distinct()
+
+r <- rbind(df.r, df.r2)
+
+
+dat.s <- dat.s %>%
+  left_join(., r, by = "NK") %>%
+  distinct()
+
+```
+
+# Explore Data
+
+### Data Diagnsotics for outliers
+
+## Plot suscpicoius points
+
+```{r, `weirdPoints`, figures-side, fig.show="hold", out.width="50%"}
+dat.f%>%
+  filter(taxon_name =="Antigone canadensis canadensis",
+         sex %in% c("M", "F"),
+         bursa %in% c("Y", "N", NA))%>%
+ggplot(., aes(mass, mean_trachea_length, fill = sus, size=bursa))+
+  geom_point(shape=21)
+
+dat.f%>%
+  filter(taxon_name =="Antigone canadensis tabida",
+         sex %in% c("M", "F"),,
+         bursa %in% c("Y", "N", NA))%>%
+ggplot(., aes(mass, mean_trachea_length, fill = bursa, size=sex))+
+  geom_point( shape=21)
+
+```
+
+### Mean Trachea Length
+
+```{r, `NHmtl`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+plotNormalHistogram(log10(dat.g$mean_trachea_length)) #Slightly skewed left
+plotNormalHistogram(log10(dat.l$mean_trachea_length)) #looks decent but clearly bi-modal
+
+```
+
+```{r, `QQPmtl`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+qqPlot(log10(dat.g$mean_trachea_length)) #both have some peculiar non-normal behaviors after log transform...
+qqPlot(log10(dat.l$mean_trachea_length)) #both have some peculiar non-normal behaviors after log transform...
+
+```
+
+These quantile plots confirm no extreme outliers in mean trachea length.
+
+### Mass
+
+```{r, `NHM`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+plotNormalHistogram(dat.g$log_mass) #weird step here after log transform
+plotNormalHistogram(dat.l$log_mass) #weird step here too before and after log transform but no apparent outliers
+
+```
+
+Both look pretty solid. Removed one lesser outlier by mass
+
+```{r, `QQPM`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+qqPlot(dat.g$log_mass) #acceptable
+qqPlot(dat.l$log_mass) #looking weird at edges need to keep an eye out for the NMDGF samples
+
+```
+
+### Ring count
+```{r, `NHrg`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+plotNormalHistogram(log10(dat.g$segment_count_mean)) #skewed left
+plotNormalHistogram(log10(dat.l$segment_count_mean)) #left skewed after log transform
+
+```
+
+```{r, `QQPrg`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+qqPlot(log10(dat.g$segment_count_mean)) #removed a single point where both segment counts were >350
+qqPlot(log10(dat.l$segment_count_mean)) #no real outliers but weird shape
+
+```
+
+### Width at first curve
+```{r, `NHwfc`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+
+plotNormalHistogram(log10(dat.g$width_1st_curve)) #Something very wrong initially too much of spread.. remove all 1 values
+plotNormalHistogram(log10(dat.l$width_1st_curve)) #Again somehow very low values of 1 got in here
+
+```
+
+```{r, `QQPwfc`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+
+qqPlot(log10(dat.g$width_1st_curve)) #I can live with these
+qqPlot(log10(dat.l$width_1st_curve)) #look good
+
+```
+
+### Width at second curve
+```{r, `NHw2c`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+
+plotNormalHistogram(log10(dat.g$width_2nd_curve)) #looks good 
+plotNormalHistogram(log10(dat.l$width_2nd_curve)) #looks good
+
+```
+
+```{r, `QQPw2c`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+
+qqPlot(log10(dat.g$width_2nd_curve)) #Looks good
+qqPlot(log10(dat.l$width_2nd_curve)) #acceptable
+
+```
+
+### Anterior width
+```{r, `NHaw`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+
+plotNormalHistogram(log10(dat.g$anterior_width)) #looks good 
+plotNormalHistogram(log10(dat.l$anterior_width)) #maybe low outlier but looking at data I don't want to remove anything
+
+```
+
+```{r, `QQPaw`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+
+qqPlot(log10(dat.g$anterior_width)) #Looks good
+qqPlot(log10(dat.l$anterior_width)) #acceptable
+
+```
+
+### Posterior width
+```{r, `NHpw`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+plotNormalHistogram(log10(dat.g$poserior_width)) #looks good 
+plotNormalHistogram(log10(dat.l$poserior_width)) #looks good
+```
+
+```{r, `QQPpw`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+
+qqPlot(log10(dat.g$poserior_width)) #Looks good
+qqPlot(log10(dat.l$poserior_width)) #Some low guys here, but seem ok as far as outliers.
+
+```
+
+### Width straight midpoint
+```{r, `NHsmw`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+plotNormalHistogram(log10(dat.g$width_straight_mdpt)) #looks good 
+plotNormalHistogram(log10(dat.l$width_straight_mdpt)) #looks good
+```
+
+```{r, `QQPsmw`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+
+qqPlot(log10(dat.g$width_straight_mdpt)) #Looks good
+qqPlot(log10(dat.l$width_straight_mdpt)) #Looks good
+
+```
+
+### Mass syrinx trachea
+```{r, `NHmst`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+plotNormalHistogram(log10(dat.g$`mass_trachea+syrinx`)) #looks good 
+plotNormalHistogram(log10(dat.l$`mass_trachea+syrinx`)) #looks good high end outlier
+```
+
+```{r, `QQPmst`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+
+qqPlot(log10(dat.g$`mass_trachea+syrinx`)) #Looks kinda crazy but not using model before ordination
+qqPlot(log10(dat.l$`mass_trachea+syrinx`)) #Looks good
+
+```
+
+### Tail
+```{r, `NHtail`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+plotNormalHistogram(log10(dat.g$tail)) #looks good 
+plotNormalHistogram(log10(dat.l$tail)) #looks good high end outlier
+```
+
+```{r, `QQPtail`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+
+qqPlot(log10(dat.g$tail)) #Looks good
+qqPlot(log10(dat.l$tail)) #Looks good
+#Removed low outlier
+```
+
+### Wing
+```{r, `NHwing`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+plotNormalHistogram(log10(dat.g$wing.chord)) #looks good 
+plotNormalHistogram(log10(dat.l$wing.chord)) #Woah is that male female diff?
+```
+
+```{r, `QQPwing`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+
+qqPlot(log10(dat.g$wing.chord)) #Looks good
+qqPlot(log10(dat.l$wing.chord)) #Looks good
+
+```
+
+### Anterior culmen
+```{r, `NHantc`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+plotNormalHistogram(log10(dat.g$anterior.culmen)) #looks good 
+plotNormalHistogram(log10(dat.l$anterior.culmen)) #looks fine
+```
+
+```{r, `QQPantc`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+
+qqPlot(log10(dat.g$anterior.culmen)) #Looks good
+qqPlot(log10(dat.l$anterior.culmen)) #Looks good
+#Removed low outlier
+```
+
+### Posterior culmen
+```{r, `NHposc`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+plotNormalHistogram(log10(dat.g$posterior.culmen)) #looks good 
+plotNormalHistogram(log10(dat.l$posterior.culmen)) #low end outlier?
+```
+
+```{r, `QQPposc`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+
+qqPlot(log10(dat.g$posterior.culmen)) #Looks good
+qqPlot(log10(dat.l$posterior.culmen)) #Looks good Probably should remove tiny one but not that far out 
+#Removed low outlier
+```
+
+### Tarsus
+```{r, `NHtarsus`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+plotNormalHistogram(log10(dat.g$tarsus)) #looks good 
+plotNormalHistogram(log10(dat.l$tarsus)) #low end outlier?
+```
+
+```{r, `QQPtarsus`, echo=F, figures-side, fig.show="hold", out.width="50%"}
+
+qqPlot(log10(dat.g$tarsus)) #Looks good
+qqPlot(log10(dat.l$tarsus)) #Looks good
+#Removed low outlier from lesser
+```
+
+
+
+### Males plotted together
+
+```{r}
+ggplot(
+  dat.s %>% filter(sex %in% c("M")),
+  aes(mass, mean_trachea_length, fill = bursa, shape = sex)
+) +
+  geom_point(size=3, shape=21)
+
+```
+
+Here males are plotted together colored by sex certainty. Red points are "known sexes" meaning they were confirmed and gonads were measured by expert at [Museum of Southwestern Biology](http://www.msb.unm.edu/). Blue points are uncertain because they were sexed by NMDGF personnel who may or may not have much experience finding and designating sex by gonads. We have already visually assessed outliers from this dataset, and there is a \> 500 g separation between lesser and greater males. I am curious, however, about the three greater males that fall below 625 mm trachea length...Maybe intermediates we will keep in analysis for now.
+
+### Females plotted together
+
+```{r}
+
+ggplot(
+  dat.s %>% filter(sex %in% c("F")),
+  aes(mass, mean_trachea_length, fill = bursa, shape = sex)
+) +
+  geom_point(size=3, shape=21)
+
+```
+
+Greater females of uncertain sex show no clear pattern demanding data pruning. There is a female with very long tracheae in leasers,
+
+# Write out processed data
+```{r}
+write.csv(dat.f, "data/crane_conservative_full.csv")
+write.csv(dat.s, "data/crane_trimmed_sus.csv")
+write.csv(morpho_massive, "data/morpho_massive.csv")
+
+
+```
