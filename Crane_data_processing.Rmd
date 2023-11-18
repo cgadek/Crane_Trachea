@@ -45,6 +45,7 @@ knitr::opts_chunk$set(fig.align = "center", fig.height = 4, fig.width = 6)
 # Load Packages
 
 ```{R}
+
 pacman::p_load(
 AMR,
 devtools,
@@ -98,7 +99,8 @@ hexbin,
 ggExtra,
 rgl,
 extrafont,
-readxl)
+readxl,
+splitstackshape)
 
 #Load in functions
 source("~/Desktop/R_color_palettes/Gadek_custom_colors.R")
@@ -128,13 +130,16 @@ dat.morpho <-
 morpho_big <- read.csv("data/morpho_large.csv", header = T)
 
 morpho_big <- morpho_big %>%
-  rename(taxon.name = taxon_name,
+  dplyr::rename(taxon.name = taxon_name,
          posterior.culmen = posterior_culmen) %>%
   mutate(data.origin = "MSB")
 
 
 morpho_massive <-
-  read_excel("data/Crane_harvest_data-WORKING_COPY.xls")
+  read_excel("data/Crane harvest data-WORKING COPY.xlsx")
+
+# morpho_massive <-
+#   read_csv("data/Crane harvest data-WORKING COPY.csv")
 
 morpho_massive <- morpho_massive %>%
   dplyr::select(
@@ -153,7 +158,7 @@ morpho_massive <- morpho_massive %>%
     `Trachea diameter`,
   ) %>%
   filter(County %in% c("SOCORRO", "VALENCIA", "Socorro- 2", "2", "3")) %>%
-  rename(
+  dplyr::rename(
     mean_trachea_length = `Trachea length`,
     mass = Weight,
     trachea.diameter = `Trachea diameter`,
@@ -166,6 +171,12 @@ morpho_massive <- morpho_massive %>%
     sex = Sex
   ) %>%
   mutate(
+    mass = as.numeric(mass),
+    tail = as.numeric(tail),
+    wing.chord = as.numeric(wing.chord),
+    anterior.culmen = as.numeric(anterior.culmen),
+    posterior.culmen = as.numeric(posterior.culmen),
+    tarsus = as.numeric(tarsus),
     Date = as.Date(Date, tryFormats = c("%d-%m-%Y", "%m/%d/%Y")),
     sample_year = year(Date),
     taxon.name = ifelse(
@@ -194,8 +205,9 @@ morpho_massive <- morpho_massive %>%
     )),
     data.origin = "NMDGF"
   ) %>%
+  filter(taxon.name %in% c("Antigone canadensis canadensis", "Antigone canadensis tabida"))%>%
   bind_rows(., morpho_big)%>%
-  rename(
+  dplyr::rename(
     taxon_name = taxon.name)
 
 morpho_big_trach <- morpho_massive %>%
@@ -210,7 +222,6 @@ dat.f <- dat.f %>%
 dat.f <- dat.f %>%
   mutate_if(sapply(dat.f, is.character), as.factor) %>%
   mutate(
-    data.origin = "MSB",
     #taxon_name = taxon_name.x,
     mass = as.numeric(as.character(mass.x)),
     segment_count1 = ifelse(segment_count1 > 350, NA, segment_count1),
@@ -239,39 +250,36 @@ dat.f <- dat.f %>%
   bind_rows(.,morpho_big_trach) %>%
   mutate(
     segment_width  = mean_trachea_length / segment_count2,
-    prop_trachea = mean_trachea_length / mass,
     #make variable that controls trachea length by the mass of each bird
     log_mass = log10(mass),
     segment_count_mean = ifelse(segment_count_mean > 350, NA, segment_count_mean),
     mass13 = mass ^ (1 / 3),
+    prop_trachea = mean_trachea_length / mass13,
     log_mtl = log10(mean_trachea_length),
     uncertain_sex = factor(uncertain_sex),
     wing.chord = ifelse(wing.chord == 160, NA, wing.chord),
     sus = ifelse(
       taxon_name == "Antigone canadensis tabida" &
         sex == "M" &
-        mass < 4500 | taxon_name == "Antigone canadensis tabida" &
-        sex == "M" &
-        mean_trachea_length < 650 | taxon_name == "Antigone canadensis tabida" &
+        mass < 4255 | taxon_name == "Antigone canadensis tabida" &
         sex == "F" &
-        mass < 4000 |
-        # taxon_name == "Antigone canadensis canadensis" &
-        # mass < 2500 |
-        # taxon_name == "Antigone canadensis canadensis" &
-        # mass < 3000  & sex == "M"
+        mass < 3717 |
         taxon_name == "Antigone canadensis canadensis" &
-        mass > 4200 |
+         sex == "F" &
+        mass > 3717 |
         taxon_name == "Antigone canadensis canadensis" &
-        mass < 2500|
+        mass < 2900|
       taxon_name == "Antigone canadensis canadensis" &
-        bursa == "Y" & mean_trachea_length <550,
+        bursa == "Y" & mean_trachea_length <500 | taxon_name == "Antigone canadensis canadensis" & sex== "M"
+      & bursa =="Y"
+      & mean_trachea_length < 550,
       "sus",
       "chill"
     ),
     BMI.tars = (mass / (tarsus) ^ 2) * 105,
     BMI.trach = (mass / (mean_trachea_length ^ 2) * 105),
     BMI.wing = (mass / (wing.chord ^ 2) * 105),
-    NK = if_else(is.na(NK), sample(40000:50000, n(), replace = FALSE), NK)
+    NK = if_else(is.na(NK), sample(40000:50000, nrow(.), replace = FALSE), NK)
   ) %>%
   filter(taxon_name %in% c("Antigone canadensis tabida", "Antigone canadensis canadensis"))%>%
   dplyr::select(-mass.x, -`width _1st_curve`, -mass.y)
@@ -279,38 +287,15 @@ dat.f <- dat.f %>%
 ```
 
 ```{r `pruneSusPoints`}
+
 dat.s <- dat.f %>% filter(sus == "chill",
                           sex %in% c("M", "F"))  #remove female greaters less than 4000 just one remove by NK and lesser over 4500
 
-#after exploration below uncertain sex doesn't help much but removes some uncertainty. for lessers most uncertain points fall within "cloud" of same sex. However bursa shows several very small males  (mass <3250) falling out with females. Removing these
+#after exploration below uncertain sex doesn't help much but removes some uncertainty. for lessers most uncertain points fall within "cloud" of same sex. However bursa shows several very small males  (mass <3250) falling out with females. Removing these.
 
 ```
 
-### Cooks distance function
 
-Lets' see how a cooks distance filter changes our dataframe
-
-```{r}
-
-cooks_dist <- function(dataframe, column){
-  dataframe <- as.data.frame(dataframe)
-  dataframe <- dataframe[, sapply(dataframe, is.numeric)]
-  mod <- lm(dataframe[, 5] ~ 1, data = dataframe)
-  cooksd <- cooks.distance(mod)
-  influential <- as.numeric(names(cooksd)[(cooksd > 4 * mean(cooksd, na.rm = TRUE))])
-  final <- dataframe[-influential, ]
-  return(final)
-}
-
-
-cd <- cooks_dist(dat.s, 4)
-
-dat.s <- dat.s%>%
-  dplyr::select(NK, taxon_name, sex, bursa, data.origin)%>%
-  left_join(cd,.)
-
-```
-Only removes 3 points I can live with that!
 
 ```{r}
 
@@ -384,19 +369,81 @@ dat.s <- dat.s %>%
 ## Plot suscpicoius points
 
 ```{r, `weirdPoints`, figures-side, fig.show="hold", out.width="50%"}
-dat.f%>%
-  filter(taxon_name =="Antigone canadensis canadensis",
-         sex %in% c("M", "F"),
-         bursa %in% c("Y", "N", NA))%>%
-ggplot(., aes(mass, mean_trachea_length, fill = sus, size=bursa))+
-  geom_point(shape=21)
+dat.s%>%
+  filter(taxon_name =="Antigone canadensis canadensis")%>%
+ggplot(., aes(mass, mean_trachea_length, fill = data.origin))+
+  geom_point(shape=21)+
+  facet_wrap(.~ sex)
+#Points from differnt origins cluster after pruning
 
-dat.f%>%
-  filter(taxon_name =="Antigone canadensis tabida",
-         sex %in% c("M", "F"),,
-         bursa %in% c("Y", "N", NA))%>%
-ggplot(., aes(mass, mean_trachea_length, fill = bursa, size=sex))+
-  geom_point( shape=21)
+dat.s%>%
+  filter(taxon_name =="Antigone canadensis tabida")%>%
+ggplot(., aes(mass, mean_trachea_length, fill = bursa))+
+  geom_point( shape=21)+
+  facet_wrap(.~ sex)
+
+```
+
+
+## Remove outlier trachea
+use cooks distance to remove outlier trachea by sex and subspecies
+
+Lets' see how a cooks distance filter changes our dataframe
+
+```{r}
+
+cooks_dist <- function(dataframe, column){
+  dataframe <- as.data.frame(dataframe)
+  dataframe <- dataframe[, sapply(dataframe, is.numeric)]
+  mod <- lm(dataframe[, column] ~ 1, data = dataframe)
+  cooksd <- cooks.distance(mod)
+  influential <- as.numeric(names(cooksd)[(cooksd > 4 * mean(cooksd, na.rm = TRUE))])
+  final <- dataframe[-influential, ]
+  return(final)
+}
+
+cd<- cooks_dist(dat.l%>%filter(sex=="F"), "mean_trachea_length")
+
+cd <- rbind(cd, cooks_dist(dat.l%>%filter(sex=="M"), "mean_trachea_length"))
+
+cd <- rbind(cd, cooks_dist(dat.g%>%filter(sex=="F"), "mean_trachea_length"))
+
+cd <- rbind(cd, cooks_dist(dat.g%>%filter(sex=="M"), "mean_trachea_length"))
+
+dat.s <- dat.s%>%
+  filter(NK %in% cd$NK)%>%
+  dplyr::select(NK, taxon_name, sex, bursa, data.origin)%>%
+  dplyr::left_join(., cd)
+
+```
+Only removes 4 points I can live with that!
+
+Same thing for mass
+```{r}
+cd<- cooks_dist(dat.l%>%filter(sex=="F"), "mass")
+
+cd <- rbind(cd, cooks_dist(dat.l%>%filter(sex=="M"), "mass"))
+
+cd <- rbind(cd, cooks_dist(dat.g%>%filter(sex=="F"), "mass"))
+
+cd <- rbind(cd, cooks_dist(dat.g%>%filter(sex=="M"), "mass"))
+
+dat.s <- dat.s%>%
+  filter(NK %in% cd$NK)%>%
+  dplyr::select(NK, taxon_name, sex, bursa, data.origin)%>%
+  dplyr::left_join(., cd)
+
+```
+Removes 9 points...
+
+
+Subset by taxon again after trim
+```{r}
+dat.l <- dat.s %>%
+  filter(dat.s$taxon_name ==  "Antigone canadensis canadensis")
+
+dat.g <- dat.s %>%
+  filter(dat.s$taxon_name != "Antigone canadensis canadensis")
 
 ```
 
@@ -594,8 +641,6 @@ qqPlot(log10(dat.l$tarsus)) #Looks good
 #Removed low outlier from lesser
 ```
 
-
-
 ### Males plotted together
 
 ```{r}
@@ -623,11 +668,28 @@ ggplot(
 
 Greater females of uncertain sex show no clear pattern demanding data pruning. There is a female with very long tracheae in leasers,
 
+## Final filter of massive morpho data
+```{r}
+morpho_massive <- morpho_massive %>%
+  filter(
+    sex %in% c("M", "F"),
+    mass >= 2500,
+    wing.chord > 380 & wing.chord < 2000,
+    tarsus < 300 & tarsus > 170,
+    anterior.culmen < 200 & anterior.culmen > 50,
+    posterior.culmen < 130 & posterior.culmen > 10,
+    taxon_name %in% c("Antigone canadensis canadensis", "Antigone canadensis tabida")
+  ) %>%
+  mutate(wt.index = wing.chord / tarsus)
+
+```
+
 # Write out processed data
 ```{r}
-write.csv(dat.f, "data/crane_conservative_full.csv")
+write.csv(dat.f, "data/crane_with_nmdgf_full.csv")
 write.csv(dat.s, "data/crane_trimmed_sus.csv")
 write.csv(morpho_massive, "data/morpho_massive.csv")
-
+write.csv(dat.l, "data/lesser.csv")
+write.csv(dat.g, "data/greater.csv")
 
 ```
