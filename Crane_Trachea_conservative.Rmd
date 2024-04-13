@@ -1085,7 +1085,7 @@ ggsave(
 ```
 
 ### Segment width by residuals mtl\~logmass subspecies
-
+#### By sex
 ```{r, echo=F}
 
 p <- dat.s %>%
@@ -1098,6 +1098,37 @@ p <- dat.s %>%
   theme_classic(base_size = 14) +
   scale_fill_sex(palette = "sexes") +
   scale_color_sex(palette = "cranes") +
+  theme(axis.text.x = element_text(face = "plain"),
+        legend.position = c(0.9, 0.2)) +
+  labs(x = "residuals", y = "segment width") +
+  facet_wrap(. ~ taxon_name)
+p
+ggsave(
+  p,
+  filename = paste(
+    getwd(),
+    "/figures/segment_width_resid_subspecies_scatter_conservative_by_sex.pdf",
+    sep = ""
+  ),
+  bg = "transparent",
+  height = 4,
+  width = 8,
+  units = "in"
+)
+
+```
+
+#### Between subsp.
+```{r, echo=F}
+
+p <- dat.s %>%
+  group_by(taxon_name, sex) %>%
+  filter(mass >= 2400,
+         bursa %in% c("Y", "N")) %>%
+  ggplot(., aes(r, segment_width, fill = taxon_name)) +
+  geom_point(shape = 21, fill = "grey", color = "black", size=2) +
+  geom_smooth(method = "lm", fill = "grey68", color="black", linetype="dashed", size=1) +
+  theme_classic(base_size = 14) +
   theme(axis.text.x = element_text(face = "plain"),
         legend.position = c(0.9, 0.2)) +
   labs(x = "residuals", y = "segment width") +
@@ -1144,7 +1175,7 @@ ggsave(
   p + theme(),
   filename = paste(
     getwd(),
-    "/figures/Segment_width_mass_scatter_conservative.pdf",
+    "/figures/Segment_count_mass_scatter_conservative.pdf",
     sep = ""
   ),
   bg = "transparent",
@@ -1156,6 +1187,42 @@ ggsave(
 ```
 
 ### Segment count by residual(mtl~mass)
+#### By sex
+```{r, echo=F}
+
+p <- dat.s %>%
+  ggplot(., aes(
+    segment_count.z,
+    r ,
+    fill = sex,
+    color = sex
+  )) +
+  geom_point(shape = 21, color = "black") +
+  geom_smooth(method = "lm", linetype="dashed", color= "black") +
+  scale_fill_sex(palette = "sexes") +
+  scale_color_sex(palette = "sexes") +
+  theme(axis.text.x = element_text(face = "plain"),
+        legend.position = "none") +
+  labs(y = "residuals(log10(mass) ~ log10(mean trachea length)", x = "ring number") +
+  facet_wrap(. ~ taxon_name)
+p
+ggsave(
+  p + theme(),
+  filename = paste(
+    getwd(),
+    "/figures/Segment_count_residuals_mass_mtl_scatter_conservative_by sex.pdf",
+    sep = ""
+  ),
+  bg = "transparent",
+  height = 4.5,
+  width = 5,
+  units = "in"
+)
+
+```
+
+
+#### By sex
 ```{r, echo=F}
 
 p <- dat.s %>%
@@ -1164,14 +1231,10 @@ p <- dat.s %>%
          bursa %in% c("Y", "N")) %>%
   ggplot(., aes(
     r ,
-    log10(segment_count_mean),
-    fill = sex,
-    color = sex
+    log10(segment_count_mean)
   )) +
-  geom_point(shape = 21, color = "black") +
-  geom_smooth(method = "lm", linetype="dashed", color= "black") +
-  scale_fill_sex(palette = "sexes") +
-  scale_color_sex(palette = "sexes") +
+  geom_point(shape = 21, fill = "grey", color = "black") +
+  geom_smooth(method = "lm", fill = "grey68", linetype="dashed", color= "black") +
   theme(axis.text.x = element_text(face = "plain"),
         legend.position = "none") +
   labs(x = "residuals(log10(mass) ~ log10(mean trachea length)", y = "ring number") +
@@ -5446,12 +5509,14 @@ ceg <- conditional_effects(greater_res_models[[3]][[9]])
 p2 <- ggplot(cel$segment_width.z, aes(effect1__, estimate__))+
   geom_ribbon(aes(ymin=lower__, ymax=upper__), fill="grey")+
   geom_line(color="black", linetype="dashed")+
- labs( x="scaled ring width ", y="residuals(trachea length ~ mass)")
+ labs( x="scaled ring width ", y="residuals(trachea length ~ mass)")+
+  scale_y_continuous(limits = c(-0.06, 0.095))
 
 p1 <- ggplot(ceg$`segment_width.z`, aes(effect1__, estimate__)) +
   geom_ribbon(aes(ymin = lower__, ymax = upper__), fill = "grey") +
   geom_line(color = "black", linetype = "dashed") +
-  labs(x = "scaled ring width ", y = "")
+  labs(x = "scaled ring width ", y = "")+
+  scale_y_continuous(limits = c(-0.06, 0.095))
 
 g <- grid.arrange(p2, p1, nrow=1)
 
@@ -5493,12 +5558,12 @@ Segment count
 cel <- conditional_effects(lesser_res_models[[3]][[9]])
 ceg <- conditional_effects(greater_res_models[[3]][[9]])
 
-p2 <- ggplot(cel$`segment_count.z:sex`, aes(effect1__, estimate__))+
+p2 <- ggplot(cel$`segment_count.z`, aes(effect1__, estimate__))+
   geom_ribbon(aes(ymin=lower__, ymax=upper__), fill="grey")+
   geom_line(color="black", linetype="dashed")+
  labs( x="scaled ring count ", y="residuals(trachea length ~ mass)")
 
-p1 <- ggplot(ceg$`segment_count.z:sex`, aes(effect1__, estimate__)) +
+p1 <- ggplot(ceg$`segment_count`, aes(effect1__, estimate__)) +
   geom_ribbon(aes(ymin = lower__, ymax = upper__), fill = "grey") +
   geom_line(color = "black", linetype = "dashed") +
   labs(x = "scaled ring count ", y = "")
