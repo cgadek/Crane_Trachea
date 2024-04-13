@@ -693,3 +693,27 @@ write.csv(dat.l, "data/lesser.csv")
 write.csv(dat.g, "data/greater.csv")
 
 ```
+
+
+
+```{R}
+cext<- read_csv("data/_All_Crane_Extractions_CRG.csv")
+
+t<-cext%>%
+  dplyr::select(`Main #`, `Alternate ID`, Genus, species, subspecies)%>%
+  rename(
+         MSB = `Alternate ID`)%>%
+  mutate(NK = as.numeric(`Main #`))%>%
+  left_join(dat.f%>%dplyr::select(NK)%>%mutate(CRG_sample = 1))%>%
+  filter(!is.na(CRG_sample))
+
+cext<-cext%>%
+  mutate(NK = as.numeric(`Main #`))%>%
+  left_join(t%>%dplyr::select(CRG_sample, NK))%>%
+  mutate(CRG_sample = if_else(CRG_sample==1, CRG_sample, 0))%>%
+  write_csv("data/_All_Crane_Extractions_CRG_samples_indicated.csv")
+
+
+  
+
+```
