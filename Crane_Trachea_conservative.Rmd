@@ -763,6 +763,24 @@ p
 
 ```
 
+### Plot segment count between subspecies
+
+```{r, echo=F}
+
+p<-dat.s %>%
+  group_by(taxon_name, sex)%>%
+  filter(!bursa %in% c("yes"),
+         mass >= 2400,
+         segment_count2 < 350)%>%
+  ggplot(., aes( segment_count_mean,  fill=taxon_name))+
+  geom_density()+
+  scale_fill_sex(palette = "sexes")+
+  theme(axis.text.x = element_text(face = "plain"))+
+  labs(y="Density", x= "mean ring count")
+p
+  ggsave(p + theme(), filename = paste(getwd(), "/figures/Segment_count_subspecies_density_conservative.pdf", sep=""),  bg = "transparent", height = 4.5, width = 8, units = "in")
+
+```
 ### Plot Segment density between subspecies and sex
 
 ```{r, echo=F}
@@ -786,6 +804,26 @@ p
   ggsave(p + theme(), filename = paste(getwd(), "/figures/segment_width_subspecies_sex_boxplot_conservative.pdf", sep=""),  bg = "transparent", height = 4.5, width = 5, units = "in")
 
 ```
+
+### Plot segment width between subspecies
+
+```{r, echo=F}
+
+p<-dat.s %>%
+  group_by(taxon_name, sex)%>%
+  filter(!bursa %in% c("yes"),
+         mass >= 2400,
+         segment_width < 350)%>%
+  ggplot(., aes( segment_width,  fill=taxon_name))+
+  geom_density()+
+  scale_fill_sex(palette = "sexes")+
+  theme(axis.text.x = element_text(face = "plain"))+
+  labs(y="Density", x= "mean ring count")
+p
+  ggsave(p + theme(), filename = paste(getwd(), "/figures/Segment_width_subspecies_density_conservative.pdf", sep=""),  bg = "transparent", height = 4.5, width = 8, units = "in")
+
+```
+
 
 ### Plot Segment count between subspecies and age
 
@@ -1091,20 +1129,44 @@ ggsave(
 p <- dat.s %>%
   group_by(taxon_name, sex) %>%
   filter(mass >= 2400,
+          taxon_name == "Antigone canadensis canadensis",
          bursa %in% c("Y", "N")) %>%
-  ggplot(., aes(r, segment_width, fill = sex, color = sex)) +
+  ggplot(., aes(segment_width, r, fill = sex, color = sex)) +
   geom_point(shape = 21, color = "black", size=2) +
   geom_smooth(method = "lm", color="black", linetype="dashed", size=1) +
   theme_classic(base_size = 14) +
   scale_fill_sex(palette = "sexes") +
   scale_color_sex(palette = "cranes") +
   theme(axis.text.x = element_text(face = "plain"),
-        legend.position = c(0.9, 0.2)) +
-  labs(x = "residuals", y = "segment width") +
-  facet_wrap(. ~ taxon_name)
+        legend.position = "none",
+        aspect.ratio = 1) +
+   scale_y_continuous(limits = c(-0.07, 0.08))+
+  labs(y = "residuals", x = "segment width")
 p
+
+
+p1 <- dat.s %>%
+  group_by(taxon_name, sex) %>%
+  filter(mass >= 2400,
+         taxon_name == "Antigone canadensis tabida",
+         bursa %in% c("Y", "N")) %>%
+  ggplot(., aes(segment_width, r, fill = sex, color = sex)) +
+  geom_point(shape = 21, color = "black", size=2) +
+  geom_smooth(method = "lm", color="black", linetype="dashed", size=1) +
+  theme_classic(base_size = 14) +
+  scale_fill_sex(palette = "sexes") +
+  scale_color_sex(palette = "cranes") +
+  theme(axis.text.x = element_text(face = "plain"),
+        legend.position = "none",
+        aspect.ratio = 1) +
+   scale_y_continuous(limits = c(-0.07, 0.08))+
+  labs(y = "residuals", x = "segment width") 
+p1
+
+g <- grid.arrange(p,p1, nrow=1)
+
 ggsave(
-  p,
+  g,
   filename = paste(
     getwd(),
     "/figures/segment_width_resid_subspecies_scatter_conservative_by_sex.pdf",
@@ -1113,7 +1175,8 @@ ggsave(
   bg = "transparent",
   height = 4,
   width = 8,
-  units = "in"
+  units = "in",
+  device = cairo_pdf
 )
 
 ```
@@ -1191,33 +1254,58 @@ ggsave(
 ```{r, echo=F}
 
 p <- dat.s %>%
-  ggplot(., aes(
-    segment_count.z,
-    r ,
-    fill = sex,
-    color = sex
-  )) +
-  geom_point(shape = 21, color = "black") +
-  geom_smooth(method = "lm", linetype="dashed", color= "black") +
+  group_by(taxon_name, sex) %>%
+  filter(mass >= 2400,
+          taxon_name == "Antigone canadensis canadensis",
+         bursa %in% c("Y", "N")) %>%
+  ggplot(., aes(segment_count_mean, r, fill = sex, color = sex)) +
+  geom_point(shape = 21, color = "black", size=2) +
+  geom_smooth(method = "lm", color="black", linetype="dashed", size=1) +
+  theme_classic(base_size = 14) +
   scale_fill_sex(palette = "sexes") +
-  scale_color_sex(palette = "sexes") +
+  scale_color_sex(palette = "cranes") +
   theme(axis.text.x = element_text(face = "plain"),
-        legend.position = "none") +
-  labs(y = "residuals(log10(mass) ~ log10(mean trachea length)", x = "ring number") +
-  facet_wrap(. ~ taxon_name)
+        legend.position = "none",
+        aspect.ratio = 1) + 
+  scale_y_continuous(limits = c(-0.07, 0.07))+
+  labs(y = "residuals", x = "segment width")
 p
+
+
+p1 <- dat.s %>%
+  group_by(taxon_name, sex) %>%
+  filter(mass >= 2400,
+         taxon_name == "Antigone canadensis tabida",
+         bursa %in% c("Y", "N")) %>%
+  ggplot(., aes(segment_count_mean, r, fill = sex, color = sex)) +
+  geom_point(shape = 21, color = "black", size=2) +
+  geom_smooth(method = "lm", color="black", linetype="dashed", size=1) +
+  theme_classic(base_size = 14) +
+  scale_fill_sex(palette = "sexes") +
+  scale_color_sex(palette = "cranes") +
+  theme(axis.text.x = element_text(face = "plain"),
+        legend.position = "none",
+        aspect.ratio = 1) +
+  scale_y_continuous(limits = c(-0.07, 0.07))+
+  labs(y = "residuals", x = "segment count") 
+p1
+
+g <- grid.arrange(p,p1, nrow=1)
+
 ggsave(
-  p + theme(),
+  g,
   filename = paste(
     getwd(),
-    "/figures/Segment_count_residuals_mass_mtl_scatter_conservative_by sex.pdf",
+    "/figures/segment_count_resid_subspecies_scatter_conservative_by_sex.pdf",
     sep = ""
   ),
   bg = "transparent",
-  height = 4.5,
-  width = 5,
-  units = "in"
+  height = 4,
+  width = 8,
+  units = "in",
+  device = cairo_pdf
 )
+
 
 ```
 
@@ -5625,6 +5713,235 @@ p1
 ggsave(p1 +theme(), filename = paste0(figures,"Greater-and_lesser_cond_eff_females_only_resid-seg_width_conservative.pdf"), height = 4, width = 4.6, units = "in", device = cairo_pdf)
 
 ```
+
+###Posterior Predicitons
+####Lesser Ring Count
+```{r}
+
+tidy_pred_lm <- lesser_res_models[[3]][[9]] %>%
+  epred_draws(
+    newdata = expand_grid(
+      sex = c("M"),
+      segment_count.z = seq(
+        min(dat.l$segment_count.z, na.rm = T),
+        max(dat.l$segment_count.z, na.rm = T),
+        length.out = 100
+      ),
+      segment_width.z = seq(
+        min(dat.l$segment_width.z, na.rm = T),
+        max(dat.l$segment_width.z, na.rm = T),
+        length.out = 100
+      )
+    ), ndraws=10
+  )
+
+tidy_pred_lf <- lesser_res_models[[3]][[9]] %>%
+  epred_draws(
+    newdata = expand_grid(
+      sex = c("F"),
+      segment_count.z = seq(
+        min(dat.l$segment_count.z, na.rm = T),
+        max(dat.l$segment_count.z, na.rm = T),
+        length.out = 100
+      ),
+      segment_width.z = seq(
+        min(dat.l$segment_width.z, na.rm = T),
+        max(dat.l$segment_width.z, na.rm = T),
+        length.out = 100
+      )
+    ), ndraws=10
+  ) 
+
+
+
+p<-tidy_pred_lm%>%
+  ggplot(., aes(segment_count.z, .epred))+
+  stat_lineribbon()+
+   labs( x="scaled ring count", y="residuals")+
+   scale_fill_brewer(palette  = "Greys")+
+  theme(legend.position = "none")+
+  scale_y_continuous(limits = c(-0.135, 0.131))
+  
+p
+
+
+p1<-tidy_pred_lf%>%
+  ggplot(., aes(segment_count.z, .epred))+
+  stat_lineribbon()+
+   labs( x="scaled ring count", y="residuals")+
+  scale_fill_brewer(palette  = "Reds")+
+  theme(legend.position = "none")+
+  scale_y_continuous(limits = c(-0.135, 0.131))
+  
+p1
+
+g<-grid.arrange(p, p1, nrow=1)
+
+ggsave(g, filename = paste0(figures,"Two_panel_lesser_male_left_predicted_resid_ring_count.pdf"), height = 4, width = 10, units = "in", device = cairo_pdf)
+
+
+
+em.l <- lesser_res_models[[3]][[9]]  %>% 
+   epred_draws(newdata = expand_grid(sex = c("M", "F"),
+                                    segment_count.z = c(0),
+                                    segment_width.z = c(0)), 
+              re_formula = NA)
+
+
+ggplot(em.l, aes(x = .epred , fill = factor(sex))) +
+  stat_halfeye(slab_alpha = 0.75) +
+  scale_fill_sex(palette = "sexes") +
+  labs(x = "Predicted scaled ring count",
+       y = "Density") 
+```
+
+
+####Greater Ring Count
+```{r}
+
+tidy_pred_gm <- greater_res_models[[3]][[9]] %>%
+  epred_draws(
+    newdata = expand_grid(
+      sex = c("M"),
+      segment_count.z = seq(
+        min(dat.g$segment_count.z, na.rm = T),
+        max(dat.g$segment_count.z, na.rm = T),
+        length.out = 100
+      ),
+      segment_width.z = seq(
+        min(dat.g$segment_width.z, na.rm = T),
+        max(dat.g$segment_width.z, na.rm = T),
+        length.out = 100
+      )
+    ), ndraws=10
+  )
+
+tidy_pred_gf <- greater_res_models[[3]][[9]] %>%
+  epred_draws(
+    newdata = expand_grid(
+      sex = c("F"),
+      segment_count.z = seq(
+        min(dat.g$segment_count.z, na.rm = T),
+        max(dat.g$segment_count.z, na.rm = T),
+        length.out = 100
+      ),
+      segment_width.z = seq(
+        min(dat.g$segment_width.z, na.rm = T),
+        max(dat.g$segment_width.z, na.rm = T),
+        length.out = 100
+      )
+    ), ndraws=10
+  ) 
+
+
+
+p<-tidy_pred_gm%>%
+  ggplot(., aes(segment_count.z, .epred))+
+  stat_lineribbon()+
+   labs( x="scaled ring count", y="residuals")+
+   scale_fill_brewer(palette  = "Greys")+
+  theme(legend.position = "none")+
+  scale_y_continuous(limits = c(-0.135, 0.15))
+  
+p
+
+
+p1<-tidy_pred_gf%>%
+  ggplot(., aes(segment_count.z, .epred))+
+  stat_lineribbon()+
+  labs( x="scaled ring count", y="residuals")+
+  scale_fill_brewer(palette  = "Reds")+
+  theme(legend.position = "none")+
+  scale_y_continuous(limits = c(-0.135, 0.15))
+  
+p1
+
+g<-grid.arrange(p, p1, nrow=1)
+
+ggsave(g, filename = paste0(figures,"Two_panel_greater_male_left_predicted_resid_ring_count.pdf"), height = 4, width = 10, units = "in", device = cairo_pdf)
+
+
+em.g <- greater_res_models[[3]][[9]]  %>% 
+   epred_draws(newdata = expand_grid(sex = c("M", "F"),
+                                    segment_count.z = c(0),
+                                    segment_width.z = c(0)), 
+              re_formula = NA)
+
+
+p<-ggplot(em.g, aes(x = .epred , fill = factor(sex))) +
+  stat_halfeye(slab_alpha = 0.75) +
+  scale_fill_sex(palette = "sexes") +
+  labs(x = "Predicted residual",
+       y = "Density")
+
+p
+
+
+
+
+```
+
+
+####Lesser Ring Width
+```{r}
+
+p<-tidy_pred_lm%>%
+  ggplot(., aes(segment_width.z, .epred))+
+  stat_lineribbon()+
+   labs( x="scaled ring width", y="residuals")+
+   scale_fill_brewer(palette  = "Greys")+
+  theme(legend.position = "none")+
+  scale_y_continuous(limits = c(-0.15, 0.131))
+  
+p
+
+
+p1<-tidy_pred_lf%>%
+  ggplot(., aes(segment_width.z, .epred))+
+  stat_lineribbon()+
+   labs( x="scaled ring width", y="residuals")+
+  scale_fill_brewer(palette  = "Reds")+
+  theme(legend.position = "none")+
+  scale_y_continuous(limits = c(-0.15, 0.131))
+  
+p1
+
+g<-grid.arrange(p, p1, nrow=1)
+
+ggsave(g, filename = paste0(figures,"Two_panel_lesser_male_left_predicted_resid_ring_width.pdf"), height = 4, width = 10, units = "in", device = cairo_pdf)
+```
+
+
+####Greater Ring Width
+```{r}
+
+p<-tidy_pred_gm%>%
+  ggplot(., aes(segment_width.z, .epred))+
+  stat_lineribbon()+
+   labs( x="scaled ring width", y="residuals")+
+   scale_fill_brewer(palette  = "Greys")+
+  theme(legend.position = "none")+
+  scale_y_continuous(limits = c(-0.135, 0.15))
+  
+p
+
+
+p1<-tidy_pred_gf%>%
+  ggplot(., aes(segment_width.z, .epred))+
+  stat_lineribbon()+
+  labs( x="scaled ring width", y="residuals")+
+  scale_fill_brewer(palette  = "Reds")+
+  theme(legend.position = "none")+
+  scale_y_continuous(limits = c(-0.135, 0.15))
+  
+p1
+
+g<-grid.arrange(p, p1, nrow=1)
+
+ggsave(g, filename = paste0(figures,"Two_panel_greater_male_left_predicted_resid_ring_width.pdf"), height = 4, width = 10, units = "in", device = cairo_pdf)
+```
+
+
 
 ### Segment width ~ mass
 ```{r}
